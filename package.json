@@ -35,8 +35,10 @@
         "@babel/preset-typescript": "^7.8.3",
         "babel-loader": "^8.0.6",
         "cross-env": "^7.0.0",
+        "glslify-loader": "^2.0.0",
         "match-all": "^1.2.5",
         "playcanvas-webpack-plugin": "^1.0.8",
+        "raw-loader": "^4.0.0",
         "source-map-loader": "^0.2.4",
         "terser-webpack-plugin": "^2.3.5",
         "ts-loader": "^6.2.1",
@@ -46,6 +48,11 @@
         "webpack-dev-server": "^3.10.3"
     },
     "dependencies": {
+        "cdt2d": "^1.0.0",
+        "clean-pslg": "^1.1.2",
+        "csg2d": "^0.1.2",
+        "d3-delaunay": "^5.2.1",
+        "file-saver": "^2.0.2",
         "playcanvas": "^1.24.7"
     }
 }

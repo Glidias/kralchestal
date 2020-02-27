@@ -14,5 +14,10 @@ import './pc/controls/orbit-camera';
 import './pc/controls/transit-ortho';
 import './pc/controls/transit-zooms';
 
+// kralchester components (to depreciate and factor out to seperate build)
+import './kralchester/mapping/build-materials';
+
+import './kralchester/mapping/map-build-test';
+
 // App
 console.log("Main.js detected: runtime? "+ (typeof window === 'object' && typeof importScripts !== 'function'));

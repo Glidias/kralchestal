@@ -9,7 +9,8 @@ module.exports = {
     mode: 'development',
     externals: {
         //jquery: 'jQuery',
-        playcanvas: 'pc'
+        playcanvas: 'pc',
+        cleanPSLG: 'clean-pslg'
     },
     entry: {
         main: './src/main.ts'
@@ -74,7 +75,15 @@ module.exports = {
                 },
             },
             // all files with a `.ts` or `.tsx` extension will be handled by `ts-loader`
-            { test: /\.tsx?$/, loader: 'ts-loader' }
+            { test: /\.tsx?$/, loader: 'ts-loader' },
+            {
+                test: /\.(glsl|vs|fs|vert|frag)$/,
+                exclude: /node_modules/,
+                use: [
+                  'raw-loader',
+                  //'glslify-loader'
+                ]
+              }
         ]
     }
 };
