@@ -3,6 +3,7 @@ const path = require('path');
 const PlayCanvasWebpackPlugin = require('playcanvas-webpack-plugin');
 const configuration = require('./config.json');
 const webpackCommon = require("./webpack.commons.js");
+const configCommons = require('./config.commons.js');
 
 configuration.browsers = configuration.browsers || "> 1%";
 
@@ -19,7 +20,7 @@ module.exports = {
             skipUpload: process.env.UPLOAD === "no" || !configuration.bearer || configuration.bearer.length != 32,
             bearer: configuration.bearer,
             project: configuration.projectId,
-            files: configuration.files || {
+            files: configCommons.files || configuration.files || {
                 "main.build.js": {path: "main.build.js", assetId: configuration.assetId}
             }
         })

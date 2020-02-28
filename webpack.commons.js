@@ -2,10 +2,11 @@ module.exports = {
 	externals: {
        	jquery: '$',
         playcanvas: 'pc',
-        cleanPSLG: 'clean-pslg'
+        'clean-pslg': 'cleanPSLG'
 	},
 	entry: {
-		main: './src/main.ts'
+		main: './src/main.ts',
+		gen: './src/maingen.ts'
 	},
 	rules: [
 		{
