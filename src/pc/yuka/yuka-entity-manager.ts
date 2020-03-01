@@ -22,7 +22,7 @@ export type Agent = {
 
 interface IYukaEntityManager {
     // entityManager: EntityManager;
-    addAgent(posNode: pc.GraphNode, rotationNode: pc.GraphNode, entity?: pc.Entity): void;
+    addAgent(movingEnt:MovingEntity, posNode: IPosNode, rotationNode: IRotNode, height?:number, entity?: pc.Entity): void;
 }
 
 
@@ -37,8 +37,8 @@ class YukaEntityManager extends ScriptTypeBase implements IYukaEntityManager {
         this.agents = [];
     }
 
-    addAgent(posNode: pc.GraphNode, rotationNode: pc.GraphNode, entity?: pc.Entity): void {
-        throw new Error("Method not implemented.");
+    addAgent(movingEnt:MovingEntity, posNode: IPosNode, rotationNode: IRotNode, height:number=0, entity?: pc.Entity): void {
+        // todo
     }
 
     update(dt: number) {
@@ -52,7 +52,7 @@ class YukaEntityManager extends ScriptTypeBase implements IYukaEntityManager {
             agent = agents[i];
             pos = agent.posNode.getPosition();
             agent.movingEnt.position.x = pos.x;
-            agent.movingEnt.position.y = pos.y - agent.heightRad * 0.5;
+            agent.movingEnt.position.y = pos.y - agent.heightRad;
             agent.movingEnt.position.z = pos.z;
             //agent.movingEnt.
             
