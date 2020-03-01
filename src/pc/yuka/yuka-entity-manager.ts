@@ -21,7 +21,7 @@ export type Agent = {
 }
 
 interface IYukaEntityManager {
-    // entityManager: EntityManager;
+    entityManager: EntityManager;
     addAgent(movingEnt:MovingEntity, posNode: IPosNode, rotationNode: IRotNode, height?:number, entity?: pc.Entity): void;
 }
 
