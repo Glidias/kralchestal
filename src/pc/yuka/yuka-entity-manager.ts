@@ -1,18 +1,26 @@
 import { createScript, ScriptTypeBase, attrib } from "../../../lib/create-script-decorator";
 import { EntityManager } from "../../../yuka/src/core/EntityManager";
 import { MovingEntity } from "../../../yuka/src/core/MovingEntity";
-import { Vector3 } from "../../../yuka/src/math/Vector3";
+
+// pc.GraphNode reduced access
+interface IPosNode {
+    getPosition(): pc.Vec3;
+}
+interface IRotNode {
+    // getRotation(): pc.Vec3;
+    lookAt(x: pc.Vec3 | number, y: pc.Vec3 | number, z: number, ux?: number, uy?: number, uz?: number): void;
+}
 
 export type Agent = {
     entity?: pc.Entity,
-    posNode: pc.GraphNode,
-    lastPos: Vector3,
-    rotationNode?: pc.GraphNode
+    posNode: IPosNode
+    // lastPos: Vector3,
+    rotationNode?: IRotNode
     movingEnt: MovingEntity,
     heightRad: number
 }
 
-export interface IYukaEntityManager {
+interface IYukaEntityManager {
     // entityManager: EntityManager;
     addAgent(posNode: pc.GraphNode, rotationNode: pc.GraphNode, entity?: pc.Entity): void;
 }
@@ -63,16 +71,15 @@ class YukaEntityManager extends ScriptTypeBase implements IYukaEntityManager {
         // 
         for (i = agents.length - 1; i >= 0; i--) {
             agent = agents[i];
-     
-             vel =  agent.entity.rigidbody ?  agent.entity.rigidbody.linearVelocity : agent.movingEnt.velocity;
+            let phy =  agent.entity &&  agent.entity.rigidbody;
+             vel =phy ?  agent.entity.rigidbody.linearVelocity : agent.movingEnt.velocity;
            
             pos = agent.entity.getPosition();
             if (vel.x*vel.x + vel.z*vel.z > 0.00000001) {
                 agent.rotationNode.lookAt(pos.x + vel.x, pos.y, pos.z + vel.z);
            }
             
-            if (agent.entity.rigidbody) {
-               
+            if (phy) {
                  // yagni atm... if agent is flying, force.y should be included in
                 //force.y = agent.vehicle.velocity.y - vel.y;
                 
