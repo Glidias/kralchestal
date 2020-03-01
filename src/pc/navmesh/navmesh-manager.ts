@@ -3,10 +3,11 @@ import CollisionBoundNode from "../../hx/altern/collisions/CollisionBoundNode";
 import { NavMesh } from "../../../yuka/src/navigation/navmesh/NavMesh";
 import BVHTree from "../../hx/altern/partition/js/BVHTree";
 import BVH from "../../hx/bvhtree/BVH";
+import { getAltGeometryFromModel } from "../util/mesh-utils";
 
 /**
  * Facilitates accruate lookup of all navmeshes (and pinpoint) in the world based on
- * various collision lookup approaches.
+ * various collision lookup approaches which navmesh (/island) and region it's found.
  * 
  * Also allow creation of edge wall collision profiles per navmesh.
  * 
@@ -28,7 +29,7 @@ class NavmeshManager extends ScriptTypeBase {
     @attrib({type:"entity", description: "Specified RecastCLI character scene entity reference to get agent radius for edge offsets"})
     recastCLIEntity:pc.Entity;
 
-    @attrib({type:"boolean"}) // yagni: reactive
+    @attrib({type:"boolean"}) // yagni: reactive case
     previewEdgeWalls: boolean;
 
     @attrib({type:"number", default: 12, description: "The maximum amount of bounding boxes checked in linear time before building a bounding volume hierachy instead"})
@@ -89,6 +90,67 @@ class NavmeshManager extends ScriptTypeBase {
         }
     }
 
+    // 
+
+    getBorderEdgeGeometry(v1: {x:number, y:number, z:number}, v2: {x:number, y:number, z:number}, agentHeight: number) {
+            
+        var node = new pc.GraphNode();
+
+            //var mesh = pc.createBox(this.app.graphicsDevice);
+
+            var positions =
+            [
+                v1.x , v1.y, v1.z ,  // 0
+                v2.x, v2.y, v2.z,   // 1
+                v1.x, v1.y+agentHeight, v1.z, // 2
+                v2.x, v2.y+agentHeight, v2.z,  // 3
+            ];
+            
+            var  indices = [ 2,3,0  ,0,3,1];
+
+            var options = {
+                indices: indices
+            };
+
+        var mesh = pc.createMesh(this.app.graphicsDevice, positions, options);
+
+        var material = new pc.StandardMaterial();
+        material.depthTest = false;
+        material.diffuseTint = true;
+        material.diffuse.a  = 0.2;
+        // material.depthWrite = true;
+        material.alphaTest = 0.01;
+        material.blendType = pc.BLEND_ADDITIVEALPHA;
+
+        // material.alphaToCoverage = true;
+        //var meshInstance = new pc.MeshInstance(node, mesh, material);
+
+        var instance = new pc.MeshInstance(node, mesh, material);
+
+        let model = new pc.Model();
+        model.graph = node;
+        model.meshInstances = [ instance ];
+
+        //let physics = targetEnt && targetEnt.navmesh && targetEnt.rigidbody;
+        if (this.previewEdgeWalls) { // || physics
+            var entity = new pc.Entity();
+            entity.addComponent("model");
+            entity.model.model = model;
+
+            this.app.root.addChild(entity);
+        }
+        /*
+        if () {
+            entity.addComponent("collision");
+            entity.collision.model = model;
+            entity.collision.type = "mesh";
+            entity.name = "borderEdge";
+            entity.addComponent("rigidbody", {type:pc.BODYTYPE_STATIC});    
+        }
+        */
+        return getAltGeometryFromModel(model); 
+    }
+
     // -- queries
 
     findNavmeshRegionFromRay(result:RegionResult, pos:pc.Vec3, ray:pc.Vec3) {
@@ -110,9 +172,5 @@ class NavmeshManager extends ScriptTypeBase {
         
         // may use built-in cellSpace partioning per navmesh if available?
         // Based on given allowance, more cells will be queried for potential closest finds
-    }
-
-    update () {
-
     }
 }
