@@ -1,6 +1,4 @@
 import { OBB } from "../../../yuka/src/math/OBB";
-import { Matrix3 } from "../../../yuka/src/math/Matrix3";
-import { Vector3 } from "../../../yuka/src/math/Vector3";
 import { Quaternion } from "../../../yuka/src/math/Quaternion";
 
 var INSTANCE: OBB;
