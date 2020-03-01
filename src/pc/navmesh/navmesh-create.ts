@@ -22,6 +22,8 @@ class NavmeshCreate extends ScriptTypeBase {
     @attrib({type:"number", min: 1, step:1, default:10}) cellsX: number;
     @attrib({type:"number", min: 1, step:1, default:1}) cellsY: number;
     @attrib({type:"number", min: 1, step:1, default:10}) cellsZ: number;
+
+    @attrib({type:"boolean", default:true}) hideModelAfterBuild: boolean;
     
     aabb: BoundBox;
     navmesh: NavMesh;
@@ -51,7 +53,7 @@ class NavmeshCreate extends ScriptTypeBase {
             }
         }
         
-        this.entity.model.enabled = false;
+        if (this.hideModelAfterBuild) this.entity.model.enabled = false;
     }
 
     setupNavmesh() { // assumed model is preloaded. May not be the case in general case but 
