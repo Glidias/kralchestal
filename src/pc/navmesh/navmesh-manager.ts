@@ -4,6 +4,7 @@ import { NavMesh } from "../../../yuka/src/navigation/navmesh/NavMesh";
 import BVHTree from "../../hx/altern/partition/js/BVHTree";
 import BVH from "../../hx/bvhtree/BVH";
 import { getAltGeometryFromModel } from "../util/mesh-utils";
+import { Polygon } from "../../../yuka/src/math/Polygon";
 
 /**
  * Facilitates accruate lookup of all navmeshes (and pinpoint) in the world based on
@@ -16,7 +17,7 @@ import { getAltGeometryFromModel } from "../util/mesh-utils";
  * 
  */
 
-export type RegionResult = {navmesh?:number, zone?:number, region?:number};
+export type RegionResult = {navmesh?:NavMesh, islandIndex?:number, region?:Polygon};
 
 @createScript("navmeshManager")
 class NavmeshManager extends ScriptTypeBase {
