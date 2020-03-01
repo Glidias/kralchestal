@@ -47,7 +47,7 @@ class YukaEntityManager extends ScriptTypeBase implements IYukaEntityManager {
         var pos;
         var rot;
         var vel;
-        // from physics (if any)
+        // from physics or playcanvas-related collisions/scripts sync back(if any)
         for (i = agents.length - 1; i >= 0; i--) {
             agent = agents[i];
             pos = agent.posNode.getPosition();
@@ -56,7 +56,7 @@ class YukaEntityManager extends ScriptTypeBase implements IYukaEntityManager {
             agent.movingEnt.position.z = pos.z;
             //agent.movingEnt.
             
-            // match result extVelocity for surfaceMovement back
+            // match result extVelocity for surfaceMovement back given physics (if any)
             if (agent.entity && agent.entity.rigidbody ) { //&& !this.flowFieldBehaviour.active
                 vel = agent.entity.rigidbody.linearVelocity;
                 agent.movingEnt.velocity.x = vel.x;
