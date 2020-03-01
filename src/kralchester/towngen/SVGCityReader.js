@@ -681,6 +681,15 @@ function getBBoxCenter(rect) {
 function triSVGString(vertSoup, tri) {
 	return `M${vertSoup[tri[2]][0]},${vertSoup[tri[2]][1]} L${vertSoup[tri[1]][0]},${vertSoup[tri[1]][1]} L${vertSoup[tri[0]][0]},${vertSoup[tri[0]][1]} Z`;
 }
+
+function cdtTriCCWFunction(tri, ptArr) {
+	let a = ptArr[tri[2]];
+	let b = ptArr[tri[1]];
+	let c = ptArr[tri[0]];
+	//( ( c.x - a.x ) * ( b.z - a.z ) ) - ( ( b.x - a.x ) * ( c.z - a.z ) );
+	return ( ( c[0] - a[0] ) * ( b[1] - a[1] ) ) - ( ( b[0] - a[0] ) * ( c[1] - a[1] ) ) >=0;
+}
+
 function getTriPolygon(vertSoup, tri, y) {
 	if (y === undefined) y = 0;
 	let poly = new Polygon().fromContour([
@@ -1103,6 +1112,7 @@ class SVGCityReader {
 
 	static exportWavefrontObj(deployable, exportGroups=true) {
 		let lines = [];
+		let totalFaces = 0;
 		if (deployable.vertices) { // single grouped object
 			let vertices;
 			let indices;
@@ -1125,6 +1135,7 @@ class SVGCityReader {
 			len = indices.length;
 			for (let i = 0; i< len; i+=3) {
 				// Wavefront obj face indices start from 1 always
+				totalFaces++;
 				lines.push("f " + (indices[i]+1) + " " + (indices[i+1]+1) + " " + (indices[i+2]+1));
 			}
 		} else { // object hash or Array of groups
@@ -1155,6 +1166,7 @@ class SVGCityReader {
 				}
 			});
 
+			
 			list.forEach((obj) => {
 				let indices;
 				let len;
@@ -1163,10 +1175,12 @@ class SVGCityReader {
 				len = indices.length;
 				if (exportGroups) lines.push("g "+obj.key);
 				for (let i = 0; i< len; i+=3) {
+					totalFaces++;
 					lines.push("f " + (baseI+indices[i]) + " " + (baseI+indices[i+1]) + " " + (baseI+indices[i+2]));
 				}
 			});
 		}
+		console.log("Exporting wavefront object: tris: "+ totalFaces)
 		return lines.join("\n");
 	}
 
@@ -1497,8 +1511,9 @@ class SVGCityReader {
 		navmesh.attemptBuildGraph = false;
 
 		// navmesh.bvh = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromCDT(obstacleVerts, groundLevel, cdt));
+		//cdt = cdt.filter((c) => cdtTriCCWFunction(c, obstacleVerts));
 		let navmeshTriPolies = cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)});
-
+		navmeshTriPolies.filter((p)=>p.plane.normal.y > 0);
 
 		let navmeshTriVertices = NavMeshUtils.getVertexListFromPolygons(navmeshTriPolies);
 		// add entrance polygons to ground navmesh
@@ -1692,7 +1707,7 @@ class SVGCityReader {
 				// floor
 				navmesh = new NavMesh();
 				navmesh.attemptBuildGraph = false;
-				navmesh.fromPolygons(cdtFloor.map((tri)=> {return getTriPolygon(ptArr, tri, groundLevel)} ));
+				navmesh.fromPolygons(cdtFloor.map((tri)=> {return getTriPolygon(ptArr, tri, groundLevel)}).filter((p)=>p.plane.normal.y>0));
 
 				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d:  navmesh.regions.map(polygonSVGString).join(" ") }));
 
@@ -4288,6 +4303,7 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 			let cdtObj = this.getCDTObjFromPointsList(baseVerticesSoup.concat(explode2DArray(wards[i].neighborhoodPts)), true, {exterior:false});
 			let cdt = cdtObj.cdt;
 			cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
+
 			let navmesh = new NavMesh();
 			navmesh.attemptBuildGraph = false;
 			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(cdtObj.vertices, tri)}));

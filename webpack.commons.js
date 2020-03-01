@@ -1,13 +1,19 @@
+const entry = process.env.GEN_ONLY === "yes" ? { // gen only
+	gen: './src/maingen.ts'
+} : process.env.GEN_ONLY === "no" ? { // all
+	main: './src/main.ts',
+	gen: './src/maingen.ts'
+} : { // main only
+	main: './src/main.ts'
+};
+
 module.exports = {
 	externals: {
        	jquery: '$',
         playcanvas: 'pc',
         'clean-pslg': 'cleanPSLG'
 	},
-	entry: {
-		main: './src/main.ts',
-		gen: './src/maingen.ts'
-	},
+	entry: entry,
 	rules: [
 		{
 			test: /\.(j|t)s(x)?$/,

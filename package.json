@@ -7,9 +7,11 @@
         "start": "cross-env NODE_ENV=development webpack --config webpack.config.js && cross-env NODE_ENV=development webpack-dev-server --config webpack.config.js --port 8081 --inline --hot",
         "https": "cross-env NODE_ENV=development webpack --config webpack.config.js && cross-env UPLOAD=no NODE_ENV=development webpack-dev-server --config webpack.config.js --port 8081 --inline --hot --https",
         "build": "cross-env NODE_ENV=production webpack --config webpack.config.js",
+        "build_all": "cross-env NODE_ENV=production GEN_ONLY=no webpack --config webpack.config.js",
         "build:dev": "cross-env NODE_ENV=development webpack --config webpack.config.js",
         "build:dev:offline": "cross-env UPLOAD=no NODE_ENV=development webpack --config webpack.config.js",
         "build:prod:offline": "cross-env UPLOAD=no NODE_ENV=production webpack --config webpack.config.js",
+        "genbuild": "cross-env NODE_ENV=production GEN_ONLY=yes webpack --config webpack.config.js",
         "update:haxe-types": "node haxe-type"
     },
     "keywords": [
