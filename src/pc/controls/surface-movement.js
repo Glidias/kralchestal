@@ -31,6 +31,8 @@ SurfaceMovement.prototype.initialize = function() {
 
 // initialize code called once per entity
 SurfaceMovement.prototype.postInitialize = function() {
+    if (this.collisionScene) return;
+
     this.collisionScene = this.app.root.collisionScene || (this.app.root.children.length ? this.app.root.children[0].collisionScene : null) || ( window["Rootscene"] ? Rootscene.SCENE :  null);
     if (!this.collisionScene) alert("SurfaceMovement:: Failed to find collision scene!");
     if (this.collisionScene == null) {
