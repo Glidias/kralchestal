@@ -9,7 +9,6 @@ import CollisionEvent from "../../hx/systems/collisions/CollisionEvent";
  * ground movement.
  * @type {typeof pc.ScriptType & {attributes: pc.ScriptAttributes}}
  */
-
 var SurfaceMovement = pc.createScript('surfaceMovement');
 
 SurfaceMovement.attributes.add('gravForce', { type: 'number', default:0.5 });
@@ -28,6 +27,22 @@ SurfaceMovement.prototype.initialize = function() {
     if (!this.posNode) this.posNode = this.entity;
     if (!this.vel) this.vel = new pc.Vec3();
 };
+
+/**
+ * @param posNode {{getPosition: ()=>pc.Vec3, setPosition: (x: number, y:number, z:number)=>void}}
+ * @param vel {Vector3D}
+ */
+SurfaceMovement.prototype.setPayload = function (posNode, vel) {
+    this.posNode = posNode;
+    this.vel = vel;
+}
+
+/**
+ * @param scene {CollisionBoundNode}
+ */
+SurfaceMovement.prototype.setCollisionScene = function(scene) {
+    this.collisionScene = scene;
+}
 
 // initialize code called once per entity
 SurfaceMovement.prototype.postInitialize = function() {
@@ -107,3 +122,5 @@ SurfaceMovement.prototype.update = function(dt) {
     this.gotGroundNormal = gotGroundNormal;
     this.posNode.setPosition(destination.x, destination.y, destination.z);
 };
+
+export default SurfaceMovement;
