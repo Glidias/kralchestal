@@ -81,6 +81,7 @@ SurfaceMovement.prototype.update = function(dt) {
     var collider = SurfaceMovement.COLLIDER;
     collider.radiusX = collider.radiusZ = this.entity.collision.radius;
     collider.radiusY = this.entity.collision.height * 0.5;
+    collider.threshold = this.ellipsoidThreshold;
 
     // || (this.gotGroundNormal) &&  .maximum_ground_normal.dotProduct(this.vel) > 0)
     if ( !this.gotGroundNormal ) {
