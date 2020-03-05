@@ -25,10 +25,6 @@ class SurfaceAgent extends Vehicle {
         this.groundNormalThreshold = groundNormalThreshold;
     }
 
-    clone(): SurfaceAgent {
-        return new SurfaceAgent({ collider: this.collider, collidable: this.collidable, groundNormalThreshold: this.groundNormalThreshold });
-    }
-
     /*
 	lookAt( target: Vector3 ): SurfaceAgent {
         let td = TARGET_DIRECTION;
