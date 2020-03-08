@@ -119,36 +119,47 @@ function randomValY(n){
     return 0.618033988749894848 * i % 1;
   }
 
+nCount = 0;//Math.ceil(Math.random()*10);
 function randomPoint(A, B, C) {
 		nCount++;
     let res = r2(nCount);
-    let ptry= res.x; //randomValX(nCount);
-    let qtry =res.y;// randomValY(nCount);
-    let p = Math.random()*0.01 + halton(nCount, 2)*0.0 +  ptry*0.99; //randomValX(nCount)
-    let q = Math.random()*0.01 +  halton(nCount, 3)*0.0 +  qtry *0.99; //randomValY(nCount)
+    let ptry= randomValX(nCount);
+    let qtry =randomValY(nCount);
+    let perturb = 0;
+    let regular =1;
+    let halt =0;
+    let p = Math.random()*perturb + halton(nCount, 2)*halt +  ptry*regular; //randomValX(nCount)
+    let q = Math.random()*perturb +  halton(nCount, 3)*halt +  qtry *regular; //randomValY(nCount)
 
 		//act(p0 + float(n)*vec2(0.754877669, 0.569840296))
     if (p + q > 1) {
-    	p = 1 - p
-      q = 1 - q
+    	//p = 1 - p
+      //q = 1 - q
     }
-
+    
+    let v = Math.sqrt(q);
+    let a = 1 - v;
+    let b = (1 - p) * v;
+	  let c = p * v;
+  
     let dx = (C.x - A.x);
     let dy = (C.y - A.y);
     let d = Math.sqrt(dx*dx + dy*dy);
 		let pr = Math.sqrt(p);
     // A + AB * p + BC * q
-    let x = A.x + (B.x - A.x)* q + (C.x - A.x) * p
-    let y = A.y + (B.y - A.y) *q + (C.y - A.y) *p
+    //let x = A.x + (B.x - A.x)* q + (C.x - A.x) * p
+   // let y = A.y + (B.y - A.y) *q + (C.y - A.y) *p
+   
+    	
+   let x = a*A.x + b*B.x + c*C.x;
+   let y =  a*A.y + b*B.y + c*C.y;
 
-
-
-    return { x, y }
+   return { x, y }
 }
 
-let A = { x:20, y:40 }
+let A = { x:100, y:150 }
 let B = { x:300, y:0 }
-let C = { x:100, y:150 }
+let C = { x:20, y:40 }
 
 drawLine(A, B)
 drawLine(B, C)
@@ -157,7 +168,33 @@ drawText('A', A.x - 10, A.y - 5)
 drawText('B', B.x + 10, B.y - 5)
 drawText('C', C.x - 5, C.y + 10)
 
-for (let i = 0; i < 444; i++) {
-	drawDot(randomPoint(A, B, C))
+for (let i = 0; i <17; i++) {
+   drawDot(randomPoint(A, B, C))
 }
+*/
+
+
+/*
+On navmesh
+
+Generate entire reservoire of polygons (but bounded).
+For eac shortest path tree set that stores the edge to current polygon, also store (regarding the edge itself, the reference visitattion point for closest point on edge upon entry)
+
+Run through entire reservoire list to get area, and determine how many max prefered point allocations per polygon.
+
+Run through entire resourvire list again to randomly determine number of allocations for polygon, up to max prefered limit. 
+
+If max prefered limit is reached for polgon. then mark it to be skipped and spliced from list.
+
+In the event all polygons have been spliced out from list and there still neeeds remaining allocations, continue expanding the graph out from all node areas that have edges leading to unknown cost areas.
+
+Fill points for given polygons respectively up to max limit, but also check if it's within distance of reference visitation point to mark the point as confirmed. For points that are too far out from vistation point or too far out from nearest confirmed point, reject. Also consider optionally for points that intersect other points (based off agent radius) to be snapped and rejected. Continue filling point up to max limit.
+
+Add any rejected points to next polygon in resevoire list, up to max limit. Repeat process for next polygon until all required allocations has been reached.
+
+In the event there are still rejected points left before the required allocations has been reacehed. The graph must be expanded further again. Repeat until there is no more space left in the graph. From there, log a warning exception or something and just force fit into any unused points anywhere. This case is unlikely rare unless you intend to squeeze way too many characters beyond what the navmesh supports.
+
+..................
+
+Alternatively, let the graph search and everytime a node has been added to shrotest path tree, add node to the rervoire and run 1 iteration through the entire reservoire, calculating the entire polygon area and area of sub-triangles (if needed) for each polygon, and then also attempt to add just 1 point into the given selected polygon, up to max prefered capacity limit, and consider that point as accepted (add to allocated success accepted count) together with the current allocated count for that polygnon (and total allocation count), and continue from there. 
 */
