@@ -20,9 +20,12 @@ var CLIP_PLANES_BOX2D:CullingPlane;
 
 const VISITED:Set<Polygon> = new Set();
 const STACK:Polygon[] = [];
+const POINT = new Vector3();
 const RAY:Ray = new Ray();
 const BOUNDS:AABB = new AABB();
 const BOUNDS2:AABB = new AABB();
+const POLYGON_COMPASS:Polygon[] = new Array(4);
+const AREA_QUERIES:Float32Array = new Float32Array(8);
 
 function getNewPlanesBox2D() { // CSS border style order, but outward facing to represent inner bounds! // ClipMacros.clipWithPlaneList uses reversed logic..bleh!
 	let headC = new CullingPlane();
@@ -59,13 +62,13 @@ function getNewPlanesBox2D() { // CSS border style order, but outward facing to 
  * @param polygons The set of valid polygons to sample area within a specific tile location
  * @param clipBounds The precomputed clip boundaries
  */
-export function geClippedFaceWithinClipBounds(polygon: Polygon, clipBounds:CullingPlane):Face {
+export function getClippedFaceWithinClipBounds(polygon: Polygon, clipBounds:CullingPlane):Face {
 	let makeshiftFace = yukaToAltPolygon(polygon);
 
 	let clippedFace = ClipMacros.clipWithPlaneList(clipBounds, makeshiftFace);
-	if (!clippedFace) {
-		console.warn("getAreaWithinClipBounds :: clip face result expected!");
-	}
+	//if (!clippedFace) {
+		//console.warn("getAreaWithinClipBounds :: clip face result expected!");
+	//}
 	makeshiftFace.destroy();
 	makeshiftFace.next = Face.collector;
 	Face.collector = makeshiftFace;
@@ -131,15 +134,57 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 	}
 	if (!getFaceAreaMethod) getFaceAreaMethod = getArea2DOfFace;
 
+	let compass = POLYGON_COMPASS;
+	compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 	DEBUG_CONTOURS.length = 0;
 
-	let area = calcAreaScoreWithinTile(startPolygon, tileCenter, xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod);
-
+	let area = calcAreaScoreWithinTile(startPolygon, tileCenter, xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+	
 	if (area < totalAreaRequired) { // need to expand from current tile
+		let north = compass[0];
+		let south = compass[2];
+		let west = compass[3];
+		let east = compass[1];
+		let areaQueries = AREA_QUERIES;
+		let point = POINT;
 
+		while (area < totalAreaRequired) {
+			let expandCalcCount = 0;
+			
+			if (north) {
+				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
+				expandCalcCount++;
+				areaQueries[0] = calcAreaScoreWithinTile(north, point.set(0, 0, -zExtent*2).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+			}
+
+			//AREA_QUERIES[4] = calcAreaScoreWithinTile(, point.set(0, 0, -zExtent*2).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass) : 0;
+			if (east) {
+				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
+				expandCalcCount++;
+				areaQueries[1] = calcAreaScoreWithinTile(east, point.set(xExtent*2, 0, 0).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+			}
+
+			if (south) {
+				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
+				expandCalcCount++;
+				areaQueries[2] = calcAreaScoreWithinTile(south, point.set(0, 0, zExtent*2).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+			}
+			if (west) {
+				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
+				expandCalcCount++;
+				areaQueries[3] = calcAreaScoreWithinTile(west, point.set(0, 0, -zExtent*2).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+				// area += calcAreaScoreWithinTile();
+			}
+			
+			if (!expandCalcCount) {
+				console.log("None found!")
+			}
+			break;
+		}
 	}
 
-	console.log(area + ' vs ' + totalAreaRequired);
+	
+	 console.log(area + ' vs ' + totalAreaRequired);
 
 	return area;
 	// return set of All tiles and available area across all tiles,
@@ -156,11 +201,13 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
  * @param zExtent The half z (breath) extent of tile
  * @param getFaceAreaMethod Method to calculate area to be gained from polygon sample. Defaults to 2D area of face (viewing from top-down).
  * @param getAreaPenaltyMethod Optional method to deduct from area gained, to penalise area.
+ * @param compass Mainly for internal use. An array of size 4 to keep track of first encountered clipped polygon for each AABB border edge
  */
 export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number,
 	getFaceAreaMethod: (face: Face)=> number,
-	getAreaPenaltyMethod?: (face: Face, polygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number) => number):number {
+	getAreaPenaltyMethod?: (face: Face, polygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number) => number, compass?:Polygon[]):number {
 	let tileClipBounds = getClipPlanesInstanceForBox2D(tileCenter, xExtent, zExtent);
+
 	let aabb = BOUNDS;
 	let ray = RAY;
 	aabb.min.x = tileCenter.x - xExtent;
@@ -180,10 +227,33 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 
 	while (--si >= 0) {
 		let polygon = STACK[si];
-
+		if (visited.has(polygon)) {
+			continue;
+		}
 		visited.add(polygon);
 
-		let clippedFace = geClippedFaceWithinClipBounds(polygon, tileClipBounds)
+		let clippedFace = getClippedFaceWithinClipBounds(polygon, tileClipBounds)
+		
+		if (compass) {
+			let clipBordersTriggered = ClipMacros.CLIP_PLANES_TRIGGERED;
+			if (compass[0]===null && (clipBordersTriggered & 1)!==0) {
+				compass[0] = polygon;
+				console.log("expand north:" + (polygon === startPolygon));
+			}
+			if (compass[1]===null && (clipBordersTriggered & 2)!==0) {
+				compass[1] = polygon;
+				console.log("expand east:" + (polygon === startPolygon));
+			}
+			if (compass[2]===null && (clipBordersTriggered & 4)!==0) {
+				compass[2] = polygon;
+				console.log("expand south:" + (polygon === startPolygon));
+			}
+			if (compass[3]===null && (clipBordersTriggered & 8)!==0) {
+				compass[3] = polygon;
+				console.log("expand west:" + (polygon === startPolygon));
+			}
+		}
+		//clipBordersTriggered & 1 ?
 		let areaToAdd = clippedFace ? getFaceAreaMethod(clippedFace)  : 0;
 
 		//if ((polygon as any)[AREA_CALC] === undefined) {
@@ -196,7 +266,10 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 		if (areaToAdd < 0) areaToAdd = 0; // sanity bounds, negative penalties cannot reduce area to negative
 		areaScore += areaToAdd;
 		if (clippedFace) {
-			DEBUG_CONTOURS.push(traceFaceContours(clippedFace));
+			if (polygon !== startPolygon) {
+				DEBUG_CONTOURS.push(traceFaceContours(clippedFace));
+				//console.log("adding extra:"+areaToAdd);
+			}
 			clippedFace.destroy();
 			clippedFace.next = Face.collector;
 			Face.collector = clippedFace;
@@ -233,6 +306,7 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 			edge = edge.next;
 		} while(edge !== polygon.edge)
 	}
+	//console.log(visited.size);
 	return areaScore;
 }
 
@@ -257,7 +331,7 @@ export function getArea2DOfFace(face:Face):number {
 	while (wn != null) {
 		var b:Vertex = w.vertex;
 		var c:Vertex = wn.vertex;
-		areaAccum += ( ( c.x - a.x ) * ( b.z - a.z ) ) - ( ( b.x - a.x ) * ( c.z - a.z ) ) * 0.5;
+		areaAccum += (( c.x - a.x ) * ( b.z - a.z ) - ( b.x - a.x ) * ( c.z - a.z )) * 0.5;
 		w = w.next;
 		wn = wn.next;
 	}
