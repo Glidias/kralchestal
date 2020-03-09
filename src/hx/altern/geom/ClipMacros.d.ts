@@ -10,7 +10,8 @@ class ClipMacros {
 constructor();
 static DUMMY_VECTOR: util_geom_Vec3;
 static transformId: number;
-static computeMeshVerticesLocalOffsets(faceList: altern_geom_Face, camNormal: util_geom_Vec3): void;
+static CLIP_PLANES_TRIGGERED: number;
+static computeMeshVerticesLocalOffsets(faceList: altern_geom_Face, camNormal: util_geom_Vec3, camOffset:number): void;
 static getClippedVerticesForFace(face: altern_geom_Face, normal: util_geom_Vec3, offset: number, tailWrapper: altern_geom_Wrapper, wrapperClone: altern_geom_Wrapper): altern_geom_Wrapper;
 static calculateFaceCoordinates2(faceList: altern_geom_Face, faceReference: altern_geom_Face): void;
 static calculateFaceCoordinates(faceList: altern_geom_Face, top: util_geom_Vec3, right: util_geom_Vec3, origin: util_geom_Vec3): void;

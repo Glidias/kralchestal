@@ -283,7 +283,7 @@ class DefaultCulling {
 			DefaultCulling.clippingNormal.x = plane.x;
 			DefaultCulling.clippingNormal.y = plane.y;
 			DefaultCulling.clippingNormal.z = plane.z;
-			(altern_geom_ClipMacros().default).computeMeshVerticesLocalOffsets(DefaultCulling.clippingTri,DefaultCulling.clippingNormal);
+			(altern_geom_ClipMacros().default).computeMeshVerticesLocalOffsets(DefaultCulling.clippingTri,DefaultCulling.clippingNormal,plane.offset);
 			DefaultCulling.clippedFace = (altern_geom_ClipMacros().default).newPositiveClipFace(DefaultCulling.clippingTri,DefaultCulling.clippingNormal,plane.offset);
 			result |= 1;
 		}
@@ -306,7 +306,7 @@ class DefaultCulling {
 				DefaultCulling.clippingNormal2.x = plane.x;
 				DefaultCulling.clippingNormal2.y = plane.y;
 				DefaultCulling.clippingNormal2.z = plane.z;
-				(altern_geom_ClipMacros().default).computeMeshVerticesLocalOffsets(DefaultCulling.clippingTri2,DefaultCulling.clippingNormal2);
+				(altern_geom_ClipMacros().default).computeMeshVerticesLocalOffsets(DefaultCulling.clippingTri2,DefaultCulling.clippingNormal2,plane.offset);
 				DefaultCulling.clippedFace2 = (altern_geom_ClipMacros().default).newPositiveClipFace(DefaultCulling.clippingTri2,DefaultCulling.clippingNormal2,plane.offset);
 				result |= 2;
 			}

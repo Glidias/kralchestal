@@ -38,23 +38,35 @@ class ClipMacros {
 	static set DUMMY_VECTOR(value) { DUMMY_VECTOR = value; }
 	static get transformId() { return transformId; }
 	static set transformId(value) { transformId = value; }
-	static computeMeshVerticesLocalOffsets(faceList,camNormal) {
+	static get CLIP_PLANES_TRIGGERED() { return CLIP_PLANES_TRIGGERED; }
+	static set CLIP_PLANES_TRIGGERED(value) { CLIP_PLANES_TRIGGERED = value; }
+	/**
+	 * 
+	 * @param {altern_geom_Face} faceList 
+	 * @param {util_geom_Vec3} camNormal 
+	 * @param {number} camOffset 
+	 * @return {number} 1 for all vertices inside plane, 2 for all vertices outside plane, 3 for mixed in/out of plane
+	 */
+	static computeMeshVerticesLocalOffsets(faceList,camNormal, camOffset) {
 		var wrapper;
 		var f;
 		ClipMacros.transformId++;
 		f = faceList;
+		var bitmaskClips = 0;
 		while(f != null) {
 			wrapper = f.wrapper;
 			while(wrapper != null) {
 				var vertex = wrapper.vertex;
 				if(vertex.transformId != ClipMacros.transformId) {
 					vertex.offset = vertex.x * camNormal.x + vertex.y * camNormal.y + vertex.z * camNormal.z;
+					bitmaskClips |= vertex.offset >= camOffset ? 1 : 2;
 					vertex.transformId = ClipMacros.transformId;
 				}
 				wrapper = wrapper.next;
 			}
 			f = f.processNext;
 		}
+		return bitmaskClips;
 	}
 	static getClippedVerticesForFace(face,normal,offset,tailWrapper,wrapperClone) {
 		var nextWrapper;
@@ -241,7 +253,7 @@ class ClipMacros {
 			inputNorm.y = bx * az - bz * ax;
 			inputNorm.z = by * ax - bx * ay;
 			var offset = v.x * inputNorm.x + v.y * inputNorm.y + v.z * inputNorm.z;
-			ClipMacros.computeMeshVerticesLocalOffsets(face,inputNorm);
+			ClipMacros.computeMeshVerticesLocalOffsets(face, inputNorm, offset);
 			if(negativeFace == null) {
 				negativeFace = ClipMacros.newPositiveClipFace(face,inputNorm,offset);
 			} else {
@@ -271,17 +283,22 @@ class ClipMacros {
 		var inputNorm = ClipMacros.DUMMY_VECTOR;
 		var count = 0;
 		p = planeList;
+		var maskVal;
+		var clipsOccured = 0;
 		while(p != null) {
-			if((clipMask & 1 << count) != 0) {
+			maskVal = 1 << count;
+			if((clipMask & maskVal) != 0) {
 				++count;
 				p = p.next;
 				continue;
 			}
+			
 			inputNorm.x = -p.x;
 			inputNorm.y = -p.y;
 			inputNorm.z = -p.z;
 			var offset = -p.offset;
-			ClipMacros.computeMeshVerticesLocalOffsets(f,inputNorm);
+			let willLikelyClip = ClipMacros.computeMeshVerticesLocalOffsets(f,inputNorm, offset);
+			clipsOccured |= willLikelyClip === 3 ? maskVal : 0;
 			if(negativeFace == null) {
 				negativeFace = ClipMacros.newPositiveClipFace(f,inputNorm,offset);
 			} else {
@@ -297,6 +314,7 @@ class ClipMacros {
 			++count;
 			p = p.next;
 		}
+		CLIP_PLANES_TRIGGERED = clipsOccured;
 		if(negativeFace != null) {
 			return negativeFace;
 		}
@@ -318,6 +336,7 @@ ClipMacros.prototype.__class__ = ClipMacros.prototype.constructor = $hxClasses["
 
 var DUMMY_VECTOR = new (util_geom_Vec3().default)();
 var transformId = 0;
+var CLIP_PLANES_TRIGGERED = 0;
 
 // Export
 
