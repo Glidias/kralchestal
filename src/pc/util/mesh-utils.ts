@@ -2,6 +2,10 @@ import AABBUtils from "../../hx/util/geom/AABBUtils";
 import BoundingBox from "../../hx/components/BoundBox";
 import Transform3D from "../../hx/components/Transform3D";
 import Geometry from "../../hx/util/geom/Geometry";
+import Face from "../../hx/altern/geom/Face";
+import Wrapper from "../../hx/altern/geom/Wrapper";
+import Vertex from "../../hx/altern/geom/Vertex";
+import { Polygon } from "../../../yuka/src/math/Polygon";
 
 export function getAltTransform(mat:pc.Mat4, t?:Transform3D) {
     let lt = mat.data;
@@ -11,6 +15,27 @@ export function getAltTransform(mat:pc.Mat4, t?:Transform3D) {
     t.i = lt[2]; t.j = lt[6]; t.k = lt[10];  t.l = lt[14];
     return t;
 };
+
+export function yukaToAltPolygon(polygon:Polygon): Face {
+    let face: Face = Face.create();
+    let w:Wrapper;
+    let v:Vertex;
+    let edge = polygon.edge;
+    let tailW:Wrapper;
+    do {
+        v = Vertex.create();
+        v.x = edge.vertex.x;
+        v.y = edge.vertex.y;
+        v.z = edge.vertex.z;
+        w = Wrapper.create();
+        if (tailW) {
+            tailW = tailW.next = w;
+        } else face.wrapper = tailW = w;
+        w.vertex = v;
+        edge = edge.next;
+    } while( edge !== polygon.edge)
+    return face;
+}
 
 export function getAltGeometryFromModel(model: pc.Model, filteredIndexList?: number[], entryBounds?: BoundingBox, globalSpace:boolean =false) {
     var meshInstances = model.meshInstances;
@@ -59,7 +84,7 @@ export function weldGeometry(geometry: Geometry) {
     for (i=0; i<len; i++) {
         index = geometry.indices[i];
         index*=3;
-         key = geometry.vertices[index] + "," + geometry.vertices[index+1] + "," + geometry.vertices[index+2];  
+         key = geometry.vertices[index] + "," + geometry.vertices[index+1] + "," + geometry.vertices[index+2];
          geometry.indices[i] = hash[key];
     }
     geometry.setVertices(vertices);
@@ -74,10 +99,10 @@ export function collectAltGeometryFromMesh(mesh:pc.Mesh, transform:Transform3D=n
     var vb = mesh.vertexBuffer;
 
     var format = vb.getFormat();
-    var stride = (format as any).size / 4; 
+    var stride = (format as any).size / 4;
     var positions;
     for (let j = 0; j < (format as any).elements.length; j++) {
-        var element = (format as any).elements[j]; 
+        var element = (format as any).elements[j];
         if (element.name === pc.SEMANTIC_POSITION) {
             positions = new Float32Array(vb.lock(), element.offset);
         }
@@ -90,7 +115,7 @@ export function collectAltGeometryFromMesh(mesh:pc.Mesh, transform:Transform3D=n
     var x; var y; var z;
     var px; var py; var pz;
 
-    var base = (mesh.primitive[0] as any).base; 
+    var base = (mesh.primitive[0] as any).base;
 
    for (let j =0; j< positions.length; j+=stride) {
        px = positions[j];
