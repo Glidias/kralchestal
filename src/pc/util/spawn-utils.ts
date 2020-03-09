@@ -9,16 +9,20 @@ import ClipMacros from "../../hx/altern/geom/ClipMacros";
 import { AABB } from "../../../yuka/src/math/AABB";
 import { Ray } from "../../../yuka/src/math/Ray";
 
-export const AREA_CALC = Symbol('spawnAreaAvailable');
-export const AREA_CALC_SCORE = Symbol('spawnAreaScore');
-export const AREA_CALC_TIME = Symbol('spawnTimestamp');
+// export const AREA_CALC = Symbol('spawnAreaAvailable');
+// export const AREA_CALC_SCORE = Symbol('spawnAreaScore');
+// export const AREA_CALC_TIME = Symbol('spawnTimestamp');
+// var PROCESS_ID = 0; // incrementing processID for timestamping
 
 var CLIP_PLANES_BOX2D:CullingPlane;
+
+
+
 const VISITED:Set<Polygon> = new Set();
 const STACK:Polygon[] = [];
 const RAY:Ray = new Ray();
-const boundBoxRef:AABB = new AABB();
-const boundBoxRef2:AABB = new AABB();
+const BOUNDS:AABB = new AABB();
+const BOUNDS2:AABB = new AABB();
 
 function getNewPlanesBox2D() { // CSS border style order, but outward facing to represent inner bounds! // ClipMacros.clipWithPlaneList uses reversed logic..bleh!
 	let headC = new CullingPlane();
@@ -127,8 +131,37 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 	}
 	if (!getFaceAreaMethod) getFaceAreaMethod = getArea2DOfFace;
 
+	DEBUG_CONTOURS.length = 0;
+
+	let area = calcAreaScoreWithinTile(startPolygon, tileCenter, xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod);
+
+	if (area < totalAreaRequired) { // need to expand from current tile
+
+	}
+
+	console.log(area + ' vs ' + totalAreaRequired);
+
+	return area;
+	// return set of All tiles and available area across all tiles,
+	// which can be used as a sample space guide bound within world to flood fill areas or survey nearby walkable areas
+}
+
+
+
+/**
+ * Calculates total area score gained from given tile area
+ * @param startPolygon The start polygon to begin scanning for current and surrounding polygon regions
+ * @param tileCenter It is assumed tile center is situated at where the startPolygon is located at as well
+ * @param xExtent The half x (length) extent of tile
+ * @param zExtent The half z (breath) extent of tile
+ * @param getFaceAreaMethod Method to calculate area to be gained from polygon sample. Defaults to 2D area of face (viewing from top-down).
+ * @param getAreaPenaltyMethod Optional method to deduct from area gained, to penalise area.
+ */
+export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number,
+	getFaceAreaMethod: (face: Face)=> number,
+	getAreaPenaltyMethod?: (face: Face, polygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number) => number):number {
 	let tileClipBounds = getClipPlanesInstanceForBox2D(tileCenter, xExtent, zExtent);
-	let aabb = boundBoxRef;
+	let aabb = BOUNDS;
 	let ray = RAY;
 	aabb.min.x = tileCenter.x - xExtent;
 	aabb.min.y = Number.MIN_SAFE_INTEGER;
@@ -143,9 +176,8 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 	let stack = STACK;
 	stack[0] = startPolygon;
 	let si = 1;
-	let area = 0;
+	let areaScore = 0;
 
-	DEBUG_CONTOURS.length = 0;
 	while (--si >= 0) {
 		let polygon = STACK[si];
 
@@ -153,14 +185,18 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 
 		let clippedFace = geClippedFaceWithinClipBounds(polygon, tileClipBounds)
 		let areaToAdd = clippedFace ? getFaceAreaMethod(clippedFace)  : 0;
-		areaToAdd -= getAreaPenaltyMethod ? getAreaPenaltyMethod(clippedFace, polygon, tileCenter, xExtent, zExtent) : 0;
 
+		//if ((polygon as any)[AREA_CALC] === undefined) {
+		//	(polygon as any)[AREA_CALC] = 0;
+		//	(polygon as any)[AREA_CALC_SCORE] = 0;
+		//}
+		//(polygon as any)[AREA_CALC] += areaToAdd;
+		areaToAdd -= getAreaPenaltyMethod ? getAreaPenaltyMethod(clippedFace, polygon, tileCenter, xExtent, zExtent) : 0;
+		//(polygon as any)[AREA_CALC_SCORE] += areaToAdd;
 		if (areaToAdd < 0) areaToAdd = 0; // sanity bounds, negative penalties cannot reduce area to negative
-		console.log("proces 1 polygon:" + areaToAdd);
-		area += areaToAdd;
+		areaScore += areaToAdd;
 		if (clippedFace) {
 			DEBUG_CONTOURS.push(traceFaceContours(clippedFace));
-
 			clippedFace.destroy();
 			clippedFace.next = Face.collector;
 			Face.collector = clippedFace;
@@ -193,19 +229,12 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 						//console.log("ADDED portaled polygon");
 					}
 				}
-
 			}
 			edge = edge.next;
 		} while(edge !== polygon.edge)
 	}
-
-	console.log(area + ' vs ' + totalAreaRequired);
-
-	return area;
-	// return set of All tiles and available area across all tiles,
-	// which can be used as a sample space guide bound within world to flood fill areas or survey nearby walkable areas
+	return areaScore;
 }
-
 
 
 // Final result of spawning samples can involve several approaches
@@ -216,6 +245,7 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
   Flood fill all points...(hashed) across entire region with optional filter,
   then get all nearest neighbor points beginning from starting point... (repeat process recursively for all points)
 */
+
 
 export function getArea2DOfFace(face:Face):number {
 	var w:Wrapper;
