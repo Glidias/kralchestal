@@ -181,6 +181,7 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 			cX = tuples[2];
 			cY = tuples[3];
 			areaQueries.fill(-1, 0, 8);
+
 			for (let i=0, l=tuples.length; i<l; i+=2) {
 				let tupKey = tuples[i]+','+tuples[i+1];
 				if (!visitedTiles.has(tupKey)) {
@@ -306,6 +307,10 @@ function totalAreaScoreCombi(a:number, b:number, c:number, Ax:number,  Ay:number
 	score.payload = [Ax, Ay, Bx, By, Cx, Cy];
 }
 
+function isTraversibleScorePayload(payload:number[]) {
+	return VISITED_TILES.get(payload[0]+','+payload[1]) > EPSILON && VISITED_TILES.get(payload[2]+','+payload[3]) > EPSILON && VISITED_TILES.get(payload[4]+','+payload[5]) > EPSILON;
+}
+
 function enqueueByAreaScore(queue:number[][], areaQueries:Float32Array, x:number, y:number) {
 	let scores = TABULATE_SCORES;
 	for (let i=0; i<8; i++ ){
@@ -324,7 +329,7 @@ function enqueueByAreaScore(queue:number[][], areaQueries:Float32Array, x:number
 	for (let i=0; i<8; i++ ){
 		let score = scores[i];
 		if (score.area <=EPSILON) break;
-		queue.push(score.payload);
+		if (isTraversibleScorePayload(score.payload)) queue.push(score.payload);
 	}
 
 }
