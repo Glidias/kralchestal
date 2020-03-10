@@ -9,6 +9,7 @@ import ClipMacros from "../../hx/altern/geom/ClipMacros";
 import { AABB } from "../../../yuka/src/math/AABB";
 import { Ray } from "../../../yuka/src/math/Ray";
 import { VisitedTilesProxy } from "./VisitedTilesProxy";
+const QuickHull = require("quick-hull-2d")
 
 // export const AREA_CALC = Symbol('spawnAreaAvailable');
 // export const AREA_CALC_SCORE = Symbol('spawnAreaScore');
@@ -280,12 +281,22 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 		}
 		*/
 
+		let hullPoints = new Array(visitedTiles.len/2*4);
+		let hi = 0;
 		for (let i=0, l=visitedTiles.len; i<l; i+=2) {
-			DEBUG_CONTOURS.push(traceTileContours(tileCenter.x + visitedTiles.resultsCache[i]*xExtent*2, tileCenter.z + visitedTiles.resultsCache[i+1]*zExtent*2, xExtent, zExtent));
+			let tx = tileCenter.x + visitedTiles.resultsCache[i]*xExtent*2;
+			let tz = tileCenter.z + visitedTiles.resultsCache[i+1]*zExtent*2;
+			hullPoints[hi++] = [ tx - xExtent, tz - zExtent ];
+			hullPoints[hi++] = [ tx + xExtent, tz - zExtent ];
+			hullPoints[hi++] = [ tx - xExtent, tz + zExtent ];
+			hullPoints[hi++] = [ tx + xExtent, tz + zExtent ];
 		}
-		console.log(area + ' vst ' + totalAreaRequired);
+		let resultHull = QuickHull(hullPoints);
+		DEBUG_CONTOURS.push(traceHullContour(resultHull));
+		console.log(area + ' vst ' + totalAreaRequired + " ::"+resultHull.length);
 		return area;
 	}
+	
 
 	 DEBUG_CONTOURS.push(traceTileContours(tileCenter.x, tileCenter.z, xExtent, zExtent));
 	 console.log(area + ' vs ' + totalAreaRequired);
@@ -502,6 +513,7 @@ export function get3DSurfaceAreaFace(face:Face):number {
 	return face.getArea();
 }
 
+
 function traceTileContours(x:number, z:number, xT:number, zT:number):number[] {
 	let numArr = [];
 	let ni = 0;
@@ -566,6 +578,26 @@ function traceFaceContours(face:Face):number[] {
 	numArr[ni++] = face.wrapper.vertex.x;
 	numArr[ni++] = face.wrapper.vertex.y;
 	numArr[ni++] = face.wrapper.vertex.z;
+
+	return numArr;
+}
+
+function traceHullContour(contours:any) {
+	let numArr = [];
+	let ni = 0;
+	let lastPt
+	for (let i = 0, l=contours.length; i < l; i++) {
+		let pt = contours[i];
+		lastPt = i !== 0 ? contours[i-1] : contours[contours.length-1];
+		numArr[ni++] = lastPt[0];
+		numArr[ni++] = 0;
+		numArr[ni++] = lastPt[1];
+
+
+		numArr[ni++] = pt[0];
+		numArr[ni++] = 0;
+		numArr[ni++] = pt[1];
+	}
 
 	return numArr;
 }

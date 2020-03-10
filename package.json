@@ -56,6 +56,7 @@
         "csg2d": "^0.1.2",
         "d3-delaunay": "^5.2.1",
         "file-saver": "^2.0.2",
-        "playcanvas": "^1.24.7"
+        "playcanvas": "^1.24.7",
+        "quick-hull-2d": "^0.1.0"
     }
 }
