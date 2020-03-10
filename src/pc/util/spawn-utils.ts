@@ -17,8 +17,10 @@ import { Ray } from "../../../yuka/src/math/Ray";
 var CLIP_PLANES_BOX2D:CullingPlane;
 
 
-
+const EPSILON = 0.00001;
 const VISITED:Set<Polygon> = new Set();
+const VISITED_REGIONS:Set<Polygon> = new Set();
+const VISITED_TILES:Map<string, number> = new Map();
 const STACK:Polygon[] = [];
 const POINT = new Vector3();
 const RAY:Ray = new Ray();
@@ -26,6 +28,7 @@ const BOUNDS:AABB = new AABB();
 const BOUNDS2:AABB = new AABB();
 const POLYGON_COMPASS:Polygon[] = new Array(4);
 const AREA_QUERIES:Float32Array = new Float32Array(8);
+const QUEUE:number[][] = [];
 
 function getNewPlanesBox2D() { // CSS border style order, but outward facing to represent inner bounds! // ClipMacros.clipWithPlaneList uses reversed logic..bleh!
 	let headC = new CullingPlane();
@@ -67,7 +70,7 @@ export function getClippedFaceWithinClipBounds(polygon: Polygon, clipBounds:Cull
 
 	let clippedFace = ClipMacros.clipWithPlaneList(clipBounds, makeshiftFace);
 	//if (!clippedFace) {
-		//console.warn("getAreaWithinClipBounds :: clip face result expected!");
+	//	console.warn("getAreaWithinClipBounds :: clip face result expected!");
 	//}
 	makeshiftFace.destroy();
 	makeshiftFace.next = Face.collector;
@@ -139,56 +142,195 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 	DEBUG_CONTOURS.length = 0;
 
 	let area = calcAreaScoreWithinTile(startPolygon, tileCenter, xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
-	
-	if (area < totalAreaRequired) { // need to expand from current tile
+
+	if (area + EPSILON < totalAreaRequired) { // need to expand from current tile, start BFS, but prioroitise expanding best area gained
 		let north = compass[0];
 		let south = compass[2];
 		let west = compass[3];
 		let east = compass[1];
 		let areaQueries = AREA_QUERIES;
+		let visitedTiles = VISITED_TILES;
+		let visitedRegions = VISITED_REGIONS;
+
+		visitedRegions.clear();
+		VISITED.forEach(visitedRegions.add, visitedRegions);
+
+		visitedTiles.clear();
+		// diagonals start from north east clockwise
+
+		areaQueries[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 		let point = POINT;
+		areaQueries.slice(0);
 
-		while (area < totalAreaRequired) {
-			let expandCalcCount = 0;
-			
-			if (north) {
-				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
-				expandCalcCount++;
-				areaQueries[0] = calcAreaScoreWithinTile(north, point.set(0, 0, -zExtent*2).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+		let curTileCenter = tileCenter;
+		let cX = 0;
+		let cY = 0;
+		let queue = QUEUE;
+		queue.length = 0;
+		queue.push([0, 0, 0, 0]);
+
+		visitedTiles.set(cX+','+cY, area);
+		area = 0;
+
+		let ar;
+
+		let expandCalcCount = 0;
+
+		while (queue.length > 0) { // <- to convert this to BFS queue
+			let tuples = queue.pop();
+			cX = tuples[2];
+			cY = tuples[3];
+			areaQueries.fill(-1, 0, 8);
+			for (let i=0, l=tuples.length; i<l; i+=2) {
+				let tupKey = tuples[i]+','+tuples[i+1];
+				if (!visitedTiles.has(tupKey)) {
+					continue;
+				}
+				area += visitedTiles.get(tupKey);
+				visitedTiles.set(tupKey, 0); // if already processed area, reset back to zero
 			}
 
-			//AREA_QUERIES[4] = calcAreaScoreWithinTile(, point.set(0, 0, -zExtent*2).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass) : 0;
-			if (east) {
-				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
-				expandCalcCount++;
-				areaQueries[1] = calcAreaScoreWithinTile(east, point.set(xExtent*2, 0, 0).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+			if (area >= totalAreaRequired) {
+				break;
 			}
 
-			if (south) {
+			// search exaustively across all 8 direction tiles for best area expansion for BFS
+			if (!visitedTiles.has((cX)+','+(cY - 1)) && north) {
 				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 				expandCalcCount++;
-				areaQueries[2] = calcAreaScoreWithinTile(south, point.set(0, 0, zExtent*2).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+				areaQueries[0] = ar = calcAreaScoreWithinTile(north, point.set(0, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass, visitedRegions);
+				visitedTiles.set((cX)+','+(cY - 1), ar);
+				if (areaQueries[0] > EPSILON) {
+					if (areaQueries[7] < 0 && compass[3] && !visitedTiles.has((cX-1)+','+(cY - 1))) { // NW
+						areaQueries[7] = ar = calcAreaScoreWithinTile(compass[3], point.set(-xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
+						expandCalcCount++;
+						visitedTiles.set((cX-1)+','+(cY - 1), ar);
+					}
+					if (areaQueries[4] < 0 && compass[1] && !visitedTiles.has((cX+1)+','+(cY - 1))) { // NE
+						areaQueries[4] = ar = calcAreaScoreWithinTile(compass[1], point.set(xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
+						expandCalcCount++;
+						visitedTiles.set((cX+1)+','+(cY - 1), ar);
+					}
+				}
 			}
-			if (west) {
+			if (!visitedTiles.has((cX+1)+','+(cY)) && east) {
 				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 				expandCalcCount++;
-				areaQueries[3] = calcAreaScoreWithinTile(west, point.set(0, 0, -zExtent*2).add(tileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
-				// area += calcAreaScoreWithinTile();
+				areaQueries[1] = ar = calcAreaScoreWithinTile(east, point.set(xExtent*2, 0, 0).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass, visitedRegions);
+				visitedTiles.set((cX+1)+','+(cY), ar);
+				if (areaQueries[1] > EPSILON) {
+					if (areaQueries[4] < 0 && compass[0] && !visitedTiles.has((cX+1)+','+(cY-1))) { // NE
+						areaQueries[4] = ar = calcAreaScoreWithinTile(compass[0], point.set(xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
+						expandCalcCount++;
+						visitedTiles.set((cX+1)+','+(cY-1), ar);
+					}
+					if (areaQueries[5] < 0 && compass[2] && !visitedTiles.has((cX+1)+','+(cY+1))) { // SE
+						areaQueries[5] = ar = calcAreaScoreWithinTile(compass[2], point.set(xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
+						expandCalcCount++;
+						visitedTiles.set((cX+1)+','+(cY+1), ar);
+					}
+				}
 			}
-			
-			if (!expandCalcCount) {
-				console.log("None found!")
+
+			if (!visitedTiles.has((cX)+','+(cY + 1)) && south) {
+				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
+				expandCalcCount++;
+				areaQueries[2] = ar = calcAreaScoreWithinTile(south, point.set(0, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass, visitedRegions);
+				visitedTiles.set((cX)+','+(cY + 1), ar);
+				if (areaQueries[2] > EPSILON) {
+					if (areaQueries[5] < 0 && compass[1] && !visitedTiles.has((cX+1)+','+(cY + 1))) { // SE
+						areaQueries[5] = ar = calcAreaScoreWithinTile(compass[1], point.set(xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
+						expandCalcCount++;
+						visitedTiles.set((cX+1)+','+(cY + 1), ar);
+					}
+					if (areaQueries[6] < 0 && compass[3] && !visitedTiles.has((cX-1)+','+(cY + 1))) { // SW
+						areaQueries[6] = ar = calcAreaScoreWithinTile(compass[3], point.set(-xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
+						expandCalcCount++;
+						visitedTiles.set((cX-1)+','+(cY + 1), ar);
+					}
+				}
 			}
-			break;
+			if (!visitedTiles.has((cX - 1)+','+(cY)) && west) {
+				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
+				expandCalcCount++;
+				areaQueries[3] = ar = calcAreaScoreWithinTile(west, point.set(0, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+				visitedTiles.set((cX - 1)+','+(cY), ar);
+				if (areaQueries[3] > EPSILON) {
+					if (areaQueries[6] < 0 && compass[2] && !visitedTiles.has((cX - 1)+','+(cY + 1))) { // SW
+						areaQueries[6] = ar =  calcAreaScoreWithinTile(compass[2], point.set(-xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null);
+						expandCalcCount++;
+						visitedTiles.set((cX - 1)+','+(cY + 1), ar);
+					}
+					if (areaQueries[7] < 0 && compass[0] && !visitedTiles.has((cX - 1)+','+(cY - 1))) { // NW
+						areaQueries[7] = ar = calcAreaScoreWithinTile(compass[0], point.set(-xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null);
+						expandCalcCount++;
+						visitedTiles.set((cX - 1)+','+(cY - 1), ar);
+					}
+				}
+			}
+
+			enqueueByAreaScore(queue, areaQueries, cX, cY);
+
+
+		}
+		if (!expandCalcCount) {
+			console.log("None found!")
 		}
 	}
 
-	
+
 	 console.log(area + ' vs ' + totalAreaRequired);
 
 	return area;
 	// return set of All tiles and available area across all tiles,
 	// which can be used as a sample space guide bound within world to flood fill areas or survey nearby walkable areas
+}
+
+type ScoreTraverse = {area:number, payload?:number[]};
+
+const TABULATE_SCORES: ScoreTraverse[] = (() => {
+	return [
+		{area:0},
+		{area:0},
+		{area:0},
+		{area:0},
+		{area:0},
+		{area:0},
+		{area:0},
+		{area:0}
+	];
+})();
+
+function totalAreaScoreCombi(a:number, b:number, c:number, Ax:number,  Ay:number, Bx:number,  By:number, Cx:number, Cy:number, score:ScoreTraverse) {
+	score.area = (a >= 0 ? a : 0) + (b >= 0 ? b: 0) + (c >=0 ? c: 0);
+	score.payload = [Ax, Ay, Bx, By, Cx, Cy];
+}
+
+function enqueueByAreaScore(queue:number[][], areaQueries:Float32Array, x:number, y:number) {
+	let scores = TABULATE_SCORES;
+	for (let i=0; i<8; i++ ){
+		// clockwise from 12 o-click
+		totalAreaScoreCombi(areaQueries[7], areaQueries[0], areaQueries[4], x-1, y-1,  x, y-1,  x+1, y-1, scores[0]);
+		totalAreaScoreCombi(areaQueries[0], areaQueries[4], areaQueries[1], x, y-1,  x+1, y-1,  x+1, y, scores[1]);
+		totalAreaScoreCombi(areaQueries[4], areaQueries[1], areaQueries[5], x+1, y-1,  x+1, y,  x+1, y+1, scores[2]);
+		totalAreaScoreCombi(areaQueries[1], areaQueries[5], areaQueries[2], x+1, y,  x+1, y+1,  x, y+1, scores[3]);
+		totalAreaScoreCombi(areaQueries[5], areaQueries[2], areaQueries[6], x+1, y+1,  x, y+1,  x-1, y+1, scores[4]);
+		totalAreaScoreCombi(areaQueries[2], areaQueries[6], areaQueries[3], x, y+1,  x-1, y+1,  x-1, y, scores[5]);
+		totalAreaScoreCombi(areaQueries[6], areaQueries[3], areaQueries[7], x-1, y+1,  x-1, y,  x-1, y-1, scores[6]);
+		totalAreaScoreCombi(areaQueries[3], areaQueries[7], areaQueries[0], x-1, y,  x-1, y-1,  x, y-1, scores[7]);
+	}
+
+	scores.sort(compare);
+	for (let i=0; i<8; i++ ){
+		let score = scores[i];
+		if (score.area <=EPSILON) break;
+		queue.push(score.payload);
+	}
+
+}
+
+function compare( a:ScoreTraverse, b:ScoreTraverse ) {
+	return ( a.area > b.area ) ? - 1 : ( a.area < b.area ) ? 1 : 0;
 }
 
 
@@ -205,7 +347,7 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
  */
 export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number,
 	getFaceAreaMethod: (face: Face)=> number,
-	getAreaPenaltyMethod?: (face: Face, polygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number) => number, compass?:Polygon[]):number {
+	getAreaPenaltyMethod?: (face: Face, polygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number) => number, compass?:Polygon[], globalVisited?:Set<Polygon>):number {
 	let tileClipBounds = getClipPlanesInstanceForBox2D(tileCenter, xExtent, zExtent);
 
 	let aabb = BOUNDS;
@@ -224,6 +366,7 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 	stack[0] = startPolygon;
 	let si = 1;
 	let areaScore = 0;
+	//let clipCount = 0;
 
 	while (--si >= 0) {
 		let polygon = STACK[si];
@@ -233,24 +376,24 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 		visited.add(polygon);
 
 		let clippedFace = getClippedFaceWithinClipBounds(polygon, tileClipBounds)
-		
+		//clipCount += clippedFace ? 1 : 0;
 		if (compass) {
 			let clipBordersTriggered = ClipMacros.CLIP_PLANES_TRIGGERED;
 			if (compass[0]===null && (clipBordersTriggered & 1)!==0) {
 				compass[0] = polygon;
-				console.log("expand north:" + (polygon === startPolygon));
+				//console.log("expand north:" + (polygon === startPolygon));
 			}
 			if (compass[1]===null && (clipBordersTriggered & 2)!==0) {
 				compass[1] = polygon;
-				console.log("expand east:" + (polygon === startPolygon));
+				//console.log("expand east:" + (polygon === startPolygon));
 			}
 			if (compass[2]===null && (clipBordersTriggered & 4)!==0) {
 				compass[2] = polygon;
-				console.log("expand south:" + (polygon === startPolygon));
+				//console.log("expand south:" + (polygon === startPolygon));
 			}
 			if (compass[3]===null && (clipBordersTriggered & 8)!==0) {
 				compass[3] = polygon;
-				console.log("expand west:" + (polygon === startPolygon));
+				//console.log("expand west:" + (polygon === startPolygon));
 			}
 		}
 		//clipBordersTriggered & 1 ?
@@ -266,10 +409,10 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 		if (areaToAdd < 0) areaToAdd = 0; // sanity bounds, negative penalties cannot reduce area to negative
 		areaScore += areaToAdd;
 		if (clippedFace) {
-			if (polygon !== startPolygon) {
+			//if (polygon !== startPolygon) {
 				DEBUG_CONTOURS.push(traceFaceContours(clippedFace));
 				//console.log("adding extra:"+areaToAdd);
-			}
+			//}
 			clippedFace.destroy();
 			clippedFace.next = Face.collector;
 			Face.collector = clippedFace;
@@ -307,6 +450,10 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 		} while(edge !== polygon.edge)
 	}
 	//console.log(visited.size);
+	//console.log("clipped:"+clipCount);
+	if (globalVisited) {
+		visited.forEach(globalVisited.add, globalVisited);
+	}
 	return areaScore;
 }
 

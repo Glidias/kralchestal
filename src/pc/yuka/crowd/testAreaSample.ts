@@ -24,7 +24,7 @@ class TestAreaSample extends ScriptTypeBase  {
 
 		this.pointsBuffer = [];
 		this.colorBuffer = [];
-		this.color = new pc.Color(1, 1, 0);
+		this.color = new pc.Color(1, 0.3, 0);
 
 
 		if (!this.navmesh.spatialIndex) {
@@ -54,7 +54,7 @@ class TestAreaSample extends ScriptTypeBase  {
 			let pLen = pts.length;
 			let p =0;
 			for (p =0; p< pLen; p+=3) {
-				this.pointsBuffer[pi] = new pc.Vec3(pts[p], pts[p+1], pts[p+2]);
+				this.pointsBuffer[pi] = new pc.Vec3(pts[p], pts[p+1]+0.001, pts[p+2]);
 				this.colorBuffer[pi] = this.color;
 				pi++;
 			}
