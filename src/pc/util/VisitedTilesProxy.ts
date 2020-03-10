@@ -13,17 +13,18 @@ class VisitedTilesProxy {
 		this.resultsCache.length = newLen;
 	}
 
+	push(x:number, y:number) {
+		this.resultsCache[this.len++] = x;
+		this.resultsCache[this.len++] = y;
+	}
+
 	get(x:number, y:number) {
 		return this.s.get(x+','+y);
 	}
 
 	set(x:number, y:number, val:number) {
-		let k = x+','+y;
-		if (!this.s.has(k)) {
-			this.resultsCache[this.len++] = x;
-			this.resultsCache[this.len++] = y;
-		}
-		this.s.set(k, val);
+
+		this.s.set(x+','+y, val);
 	}
 
 	clear() {

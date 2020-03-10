@@ -187,7 +187,9 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 				if (!visitedTiles.has(tuples[i],tuples[i+1])) {
 					continue;
 				}
-				area += visitedTiles.get(tuples[i],tuples[i+1]);
+				let areaToAdd = visitedTiles.get(tuples[i],tuples[i+1]);
+				if (areaToAdd) visitedTiles.push(tuples[i],tuples[i+1]);
+				area += areaToAdd;
 				visitedTiles.set(tuples[i],tuples[i+1], 0); // if already processed area, reset back to zero
 			}
 
@@ -271,15 +273,21 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 			}
 
 			enqueueByAreaScore(queue, areaQueries, cX, cY);
-
-
 		}
+		/*
 		if (!expandCalcCount) {
 			console.log("None found!")
 		}
+		*/
+
+		for (let i=0, l=visitedTiles.len; i<l; i+=2) {
+			DEBUG_CONTOURS.push(traceTileContours(tileCenter.x + visitedTiles.resultsCache[i]*xExtent*2, tileCenter.z + visitedTiles.resultsCache[i+1]*zExtent*2, xExtent, zExtent));
+		}
+		console.log(area + ' vst ' + totalAreaRequired);
+		return area;
 	}
 
-
+	 DEBUG_CONTOURS.push(traceTileContours(tileCenter.x, tileCenter.z, xExtent, zExtent));
 	 console.log(area + ' vs ' + totalAreaRequired);
 
 	return area;
@@ -415,7 +423,7 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 		areaScore += areaToAdd;
 		if (clippedFace) {
 			//if (polygon !== startPolygon) {
-				DEBUG_CONTOURS.push(traceFaceContours(clippedFace));
+				//DEBUG_CONTOURS.push(traceFaceContours(clippedFace));
 				//console.log("adding extra:"+areaToAdd);
 			//}
 			clippedFace.destroy();
@@ -492,6 +500,49 @@ export function getArea2DOfFace(face:Face):number {
 
 export function get3DSurfaceAreaFace(face:Face):number {
 	return face.getArea();
+}
+
+function traceTileContours(x:number, z:number, xT:number, zT:number):number[] {
+	let numArr = [];
+	let ni = 0;
+
+	numArr[ni++] = x - xT;
+	numArr[ni++] = 0;
+	numArr[ni++] = z - zT;
+
+	numArr[ni++] = x + xT;
+	numArr[ni++] = 0;
+	numArr[ni++] = z - zT;
+
+
+	numArr[ni++] = x + xT;
+	numArr[ni++] = 0;
+	numArr[ni++] = z - zT;
+
+	numArr[ni++] = x + xT;
+	numArr[ni++] = 0;
+	numArr[ni++] = z + zT;
+
+
+	numArr[ni++] = x + xT;
+	numArr[ni++] = 0;
+	numArr[ni++] = z + zT;
+
+	numArr[ni++] = x - xT;
+	numArr[ni++] = 0;
+	numArr[ni++] = z + zT;
+
+
+	numArr[ni++] = x - xT;
+	numArr[ni++] = 0;
+	numArr[ni++] = z + zT;
+
+	numArr[ni++] = x - xT;
+	numArr[ni++] = 0;
+	numArr[ni++] = z - zT;
+
+
+	return numArr;
 }
 
 function traceFaceContours(face:Face):number[] {
