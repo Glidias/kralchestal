@@ -8,6 +8,7 @@ import Vertex from "../../hx/altern/geom/Vertex";
 import ClipMacros from "../../hx/altern/geom/ClipMacros";
 import { AABB } from "../../../yuka/src/math/AABB";
 import { Ray } from "../../../yuka/src/math/Ray";
+import { VisitedTilesProxy } from "./VisitedTilesProxy";
 
 // export const AREA_CALC = Symbol('spawnAreaAvailable');
 // export const AREA_CALC_SCORE = Symbol('spawnAreaScore');
@@ -20,7 +21,7 @@ var CLIP_PLANES_BOX2D:CullingPlane;
 const EPSILON = 0.00001;
 const VISITED:Set<Polygon> = new Set();
 const VISITED_REGIONS:Set<Polygon> = new Set();
-const VISITED_TILES:Map<string, number> = new Map();
+const VISITED_TILES:VisitedTilesProxy = new VisitedTilesProxy();
 const STACK:Polygon[] = [];
 const POINT = new Vector3();
 const RAY:Ray = new Ray();
@@ -169,7 +170,7 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 		queue.length = 0;
 		queue.push([0, 0, 0, 0]);
 
-		visitedTiles.set(cX+','+cY, area);
+		visitedTiles.set(cX,cY, area);
 		area = 0;
 
 		let ar;
@@ -183,12 +184,11 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 			areaQueries.fill(-1, 0, 8);
 
 			for (let i=0, l=tuples.length; i<l; i+=2) {
-				let tupKey = tuples[i]+','+tuples[i+1];
-				if (!visitedTiles.has(tupKey)) {
+				if (!visitedTiles.has(tuples[i],tuples[i+1])) {
 					continue;
 				}
-				area += visitedTiles.get(tupKey);
-				visitedTiles.set(tupKey, 0); // if already processed area, reset back to zero
+				area += visitedTiles.get(tuples[i],tuples[i+1]);
+				visitedTiles.set(tuples[i],tuples[i+1], 0); // if already processed area, reset back to zero
 			}
 
 			if (area >= totalAreaRequired) {
@@ -196,76 +196,76 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 			}
 
 			// search exaustively across all 8 direction tiles for best area expansion for BFS
-			if (!visitedTiles.has((cX)+','+(cY - 1)) && north) {
+			if (!visitedTiles.has((cX),(cY - 1)) && north) {
 				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 				expandCalcCount++;
 				areaQueries[0] = ar = calcAreaScoreWithinTile(north, point.set(0, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass, visitedRegions);
-				visitedTiles.set((cX)+','+(cY - 1), ar);
+				visitedTiles.set((cX),(cY - 1), ar);
 				if (areaQueries[0] > EPSILON) {
-					if (areaQueries[7] < 0 && compass[3] && !visitedTiles.has((cX-1)+','+(cY - 1))) { // NW
+					if (areaQueries[7] < 0 && compass[3] && !visitedTiles.has((cX-1),(cY - 1))) { // NW
 						areaQueries[7] = ar = calcAreaScoreWithinTile(compass[3], point.set(-xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
 						expandCalcCount++;
-						visitedTiles.set((cX-1)+','+(cY - 1), ar);
+						visitedTiles.set((cX-1),(cY - 1), ar);
 					}
-					if (areaQueries[4] < 0 && compass[1] && !visitedTiles.has((cX+1)+','+(cY - 1))) { // NE
+					if (areaQueries[4] < 0 && compass[1] && !visitedTiles.has((cX+1),(cY - 1))) { // NE
 						areaQueries[4] = ar = calcAreaScoreWithinTile(compass[1], point.set(xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
 						expandCalcCount++;
-						visitedTiles.set((cX+1)+','+(cY - 1), ar);
+						visitedTiles.set((cX+1),(cY - 1), ar);
 					}
 				}
 			}
-			if (!visitedTiles.has((cX+1)+','+(cY)) && east) {
+			if (!visitedTiles.has((cX+1),(cY)) && east) {
 				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 				expandCalcCount++;
 				areaQueries[1] = ar = calcAreaScoreWithinTile(east, point.set(xExtent*2, 0, 0).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass, visitedRegions);
-				visitedTiles.set((cX+1)+','+(cY), ar);
+				visitedTiles.set((cX+1),(cY), ar);
 				if (areaQueries[1] > EPSILON) {
-					if (areaQueries[4] < 0 && compass[0] && !visitedTiles.has((cX+1)+','+(cY-1))) { // NE
+					if (areaQueries[4] < 0 && compass[0] && !visitedTiles.has((cX+1),(cY-1))) { // NE
 						areaQueries[4] = ar = calcAreaScoreWithinTile(compass[0], point.set(xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
 						expandCalcCount++;
-						visitedTiles.set((cX+1)+','+(cY-1), ar);
+						visitedTiles.set((cX+1),(cY-1), ar);
 					}
-					if (areaQueries[5] < 0 && compass[2] && !visitedTiles.has((cX+1)+','+(cY+1))) { // SE
+					if (areaQueries[5] < 0 && compass[2] && !visitedTiles.has((cX+1),(cY+1))) { // SE
 						areaQueries[5] = ar = calcAreaScoreWithinTile(compass[2], point.set(xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
 						expandCalcCount++;
-						visitedTiles.set((cX+1)+','+(cY+1), ar);
+						visitedTiles.set((cX+1),(cY+1), ar);
 					}
 				}
 			}
 
-			if (!visitedTiles.has((cX)+','+(cY + 1)) && south) {
+			if (!visitedTiles.has((cX),(cY + 1)) && south) {
 				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 				expandCalcCount++;
 				areaQueries[2] = ar = calcAreaScoreWithinTile(south, point.set(0, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass, visitedRegions);
-				visitedTiles.set((cX)+','+(cY + 1), ar);
+				visitedTiles.set((cX),(cY + 1), ar);
 				if (areaQueries[2] > EPSILON) {
-					if (areaQueries[5] < 0 && compass[1] && !visitedTiles.has((cX+1)+','+(cY + 1))) { // SE
+					if (areaQueries[5] < 0 && compass[1] && !visitedTiles.has((cX+1),(cY + 1))) { // SE
 						areaQueries[5] = ar = calcAreaScoreWithinTile(compass[1], point.set(xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
 						expandCalcCount++;
-						visitedTiles.set((cX+1)+','+(cY + 1), ar);
+						visitedTiles.set((cX+1),(cY + 1), ar);
 					}
-					if (areaQueries[6] < 0 && compass[3] && !visitedTiles.has((cX-1)+','+(cY + 1))) { // SW
+					if (areaQueries[6] < 0 && compass[3] && !visitedTiles.has((cX-1),(cY + 1))) { // SW
 						areaQueries[6] = ar = calcAreaScoreWithinTile(compass[3], point.set(-xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
 						expandCalcCount++;
-						visitedTiles.set((cX-1)+','+(cY + 1), ar);
+						visitedTiles.set((cX-1),(cY + 1), ar);
 					}
 				}
 			}
-			if (!visitedTiles.has((cX - 1)+','+(cY)) && west) {
+			if (!visitedTiles.has((cX - 1),(cY)) && west) {
 				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 				expandCalcCount++;
 				areaQueries[3] = ar = calcAreaScoreWithinTile(west, point.set(0, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
-				visitedTiles.set((cX - 1)+','+(cY), ar);
+				visitedTiles.set((cX - 1),(cY), ar);
 				if (areaQueries[3] > EPSILON) {
-					if (areaQueries[6] < 0 && compass[2] && !visitedTiles.has((cX - 1)+','+(cY + 1))) { // SW
+					if (areaQueries[6] < 0 && compass[2] && !visitedTiles.has((cX - 1),(cY + 1))) { // SW
 						areaQueries[6] = ar =  calcAreaScoreWithinTile(compass[2], point.set(-xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null);
 						expandCalcCount++;
-						visitedTiles.set((cX - 1)+','+(cY + 1), ar);
+						visitedTiles.set((cX - 1),(cY + 1), ar);
 					}
-					if (areaQueries[7] < 0 && compass[0] && !visitedTiles.has((cX - 1)+','+(cY - 1))) { // NW
+					if (areaQueries[7] < 0 && compass[0] && !visitedTiles.has((cX - 1),(cY - 1))) { // NW
 						areaQueries[7] = ar = calcAreaScoreWithinTile(compass[0], point.set(-xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null);
 						expandCalcCount++;
-						visitedTiles.set((cX - 1)+','+(cY - 1), ar);
+						visitedTiles.set((cX - 1),(cY - 1), ar);
 					}
 				}
 			}
@@ -308,7 +308,7 @@ function totalAreaScoreCombi(a:number, b:number, c:number, Ax:number,  Ay:number
 }
 
 function isTraversibleScorePayload(payload:number[]) {
-	return VISITED_TILES.get(payload[0]+','+payload[1]) > EPSILON && VISITED_TILES.get(payload[2]+','+payload[3]) > EPSILON && VISITED_TILES.get(payload[4]+','+payload[5]) > EPSILON;
+	return VISITED_TILES.get(payload[0],payload[1]) > EPSILON && VISITED_TILES.get(payload[2],payload[3]) > EPSILON && VISITED_TILES.get(payload[4],payload[5]) > EPSILON;
 }
 
 function enqueueByAreaScore(queue:number[][], areaQueries:Float32Array, x:number, y:number) {
@@ -493,8 +493,6 @@ export function getArea2DOfFace(face:Face):number {
 export function get3DSurfaceAreaFace(face:Face):number {
 	return face.getArea();
 }
-
-
 
 function traceFaceContours(face:Face):number[] {
 	let numArr = [];
