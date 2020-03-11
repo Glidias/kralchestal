@@ -173,10 +173,11 @@ function clipRegionsWithHullPoints(regions:Map<Polygon, number>, pts:number[][],
 				triCw.vertex = wn.vertex;
 				let areaToAdd = getFaceAreaMethod(triFace);
 				areaAccum += areaToAdd;
-				entireSoupArea += areaToAdd;
+				
 				w = w.next;
 				wn = wn.next;
 			}
+			entireSoupArea += areaAccum;
 			areaAccum -= getAreaPenaltyMethod ? getAreaPenaltyMethod(face, p) : 0;
 			if (areaAccum < 0) areaAccum = 0;
 
@@ -186,7 +187,7 @@ function clipRegionsWithHullPoints(regions:Map<Polygon, number>, pts:number[][],
 			
 			face.destroy();
 		} else {
-			console.warn("No clip area found for region clip attempt by convex hull!")
+			// console.warn("No clip area found for region clip attempt by convex hull!")
 		}
 	});
 	if (tailFace !== null) {
@@ -200,6 +201,9 @@ function perpCullPlane(c:CullingPlane, ax:number , az:number, bx:number, bz:numb
 	let dx = bx - ax;
 	let dz = bz - az;
 	let handedness = USE_HANDEDNESS;
+	let d = Math.sqrt(dx*dx + dz*dz);
+	dx/=d;
+	dz/=d;
 	// note that altern culling plane for this purpose is flipped, so dz and dx is already flipped
 	// normals must point outward from anti-clockwise order of points
 	c.x = -dz * handedness;
