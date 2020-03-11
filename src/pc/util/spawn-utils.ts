@@ -9,7 +9,12 @@ import ClipMacros from "../../hx/altern/geom/ClipMacros";
 import { AABB } from "../../../yuka/src/math/AABB";
 import { Ray } from "../../../yuka/src/math/Ray";
 import { VisitedTilesProxy } from "./VisitedTilesProxy";
-const QuickHull = require("quick-hull-2d")
+const QuickHull = require("quick-hull-2d");
+
+// NOTE: duplicate. Consider factoring this out to yuka globals
+const HANDEDNESS_LEFT = -1;
+const HANDEDNESS_RIGHT = -1;
+var USE_HANDEDNESS = HANDEDNESS_LEFT;
 
 // export const AREA_CALC = Symbol('spawnAreaAvailable');
 // export const AREA_CALC_SCORE = Symbol('spawnAreaScore');
@@ -21,7 +26,7 @@ var CLIP_PLANES_BOX2D:CullingPlane;
 
 const EPSILON = 0.00001;
 const VISITED:Set<Polygon> = new Set();
-const VISITED_REGIONS:Set<Polygon> = new Set();
+const VISITED_REGIONS:Map<Polygon, number> = new Map();
 const VISITED_TILES:VisitedTilesProxy = new VisitedTilesProxy();
 const STACK:Polygon[] = [];
 const POINT = new Vector3();
@@ -31,6 +36,19 @@ const BOUNDS2:AABB = new AABB();
 const POLYGON_COMPASS:Polygon[] = new Array(4);
 const AREA_QUERIES:Float32Array = new Float32Array(8);
 const QUEUE:number[][] = [];
+var TRI_FACE:Face = null;
+
+function getNewTriFace() {
+	let f:Face = new Face();
+	let w:Wrapper;
+	f.wrapper = w = new Wrapper();
+	//w.vertex = new Vertex();
+	w= w.next = new Wrapper();
+	//w.vertex = new Vertex();
+	w= w.next = new Wrapper();
+	//w.vertex = new Vertex();
+	return f;
+}
 
 function getNewPlanesBox2D() { // CSS border style order, but outward facing to represent inner bounds! // ClipMacros.clipWithPlaneList uses reversed logic..bleh!
 	let headC = new CullingPlane();
@@ -112,10 +130,83 @@ export function getClipPlanesInstanceForBox2D(center:Vector3, extentsX:number, e
 	return headC;
 }
 
-export function getClipFaceWithinClipPolygon(polygon: Polygon, clipPolygon: Polygon) {
+function clipRegionsWithHullPoints(regions:Map<Polygon, number>, pts:number[][], getFaceAreaMethod:(face: Face)=> number, getAreaPenaltyMethod: (face: Face, polygon: Polygon) => number) {
+	if (!TRI_FACE) {
+		TRI_FACE = getNewTriFace();
+	}
+	let triFace = TRI_FACE;
+	let headC = CullingPlane.create();
+	let c = headC;
+	perpCullPlane(c, pts[0][0], pts[0][1], pts[1][0], pts[1][1]);
+	let tailC;
+	for (let i =1, l=pts.length; i < l; i++) {
+		c = c.next = CullingPlane.create();
+		let nextI = i < l - 1 ? i + 1 : 0;
+		perpCullPlane(c, pts[i][0], pts[i][1], pts[nextI][0], pts[nextI][1]);
+		tailC = c;
+	}
 
+	let headFace:Face = null;
+	let tailFace:Face  = null;
+	let entireSoupArea:number = 0;
+	let totalRegionsArea:number = 0;
+	regions.forEach((v, p)=> {
+		let face = getClippedFaceWithinClipBounds(p, headC);
+		if (face) {
+			if (headFace !== null) {
+				tailFace.next = face;
+			} else headFace = face;
+			tailFace = face;
+
+			// face.offset
+			let triAw = triFace.wrapper;
+			let triBw = triFace.wrapper.next;
+			let triCw = triFace.wrapper.next.next;
+		
+			var areaAccum:number = 0;
+			let w:Wrapper = face.wrapper.next;
+			let wn:Wrapper = w.next;
+			triAw.vertex = face.wrapper.vertex;
+
+			while (wn != null) {
+				triBw.vertex = w.vertex;
+				triCw.vertex = wn.vertex;
+				let areaToAdd = getFaceAreaMethod(triFace);
+				areaAccum += areaToAdd;
+				entireSoupArea += areaToAdd;
+				w = w.next;
+				wn = wn.next;
+			}
+			areaAccum -= getAreaPenaltyMethod ? getAreaPenaltyMethod(face, p) : 0;
+			if (areaAccum < 0) areaAccum = 0;
+
+			totalRegionsArea += areaAccum;
+			regions.set(p, areaAccum);
+			DEBUG_CONTOURS.push(traceFaceContours(face));
+			
+			face.destroy();
+		} else {
+			console.warn("No clip area found for region clip attempt by convex hull!")
+		}
+	});
+	if (tailFace !== null) {
+		tailFace.next = Face.collector;
+		Face.collector = headFace;
+	}
+	return [totalRegionsArea, entireSoupArea];
 }
 
+function perpCullPlane(c:CullingPlane, ax:number , az:number, bx:number, bz:number) {
+	let dx = bx - ax;
+	let dz = bz - az;
+	let handedness = USE_HANDEDNESS;
+	// note that altern culling plane for this purpose is flipped, so dz and dx is already flipped
+	// normals must point outward from anti-clockwise order of points
+	c.x = -dz * handedness;
+	c.y = 0;
+	c.z = dx * handedness;
+	c.offset = ax * c.x + az * c.z; 
+}
 
 
 export const DEBUG_CONTOURS:number[][] = [];
@@ -132,7 +223,7 @@ export const DEBUG_CONTOURS:number[][] = [];
  */
 export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number,
 	getFaceAreaMethod?: (face: Face)=> number,
-	getAreaPenaltyMethod?: (face: Face, polygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number) => number,
+	getAreaPenaltyMethod?: (face: Face, polygon:Polygon) => number,
 	totalAreaRequired?:number):number {
 	if (!totalAreaRequired) {
 		totalAreaRequired = (xExtent*2) * (zExtent*2);
@@ -155,7 +246,7 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 		let visitedRegions = VISITED_REGIONS;
 
 		visitedRegions.clear();
-		VISITED.forEach(visitedRegions.add, visitedRegions);
+		VISITED.forEach(function(r){visitedRegions.set(r,0)}, visitedRegions);
 
 		visitedTiles.clear();
 		// diagonals start from north east clockwise
@@ -292,7 +383,9 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 			hullPoints[hi++] = [ tx + xExtent, tz + zExtent ];
 		}
 		let resultHull = QuickHull(hullPoints);
-		DEBUG_CONTOURS.push(traceHullContour(resultHull));
+		// DEBUG_CONTOURS.push(traceHullContour(resultHull));
+		
+		area = clipRegionsWithHullPoints(visitedRegions, resultHull, getFaceAreaMethod, getAreaPenaltyMethod)[0];
 		console.log(area + ' vst ' + totalAreaRequired + " ::"+resultHull.length);
 		return area;
 	}
@@ -371,7 +464,7 @@ function compare( a:ScoreTraverse, b:ScoreTraverse ) {
  */
 export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number,
 	getFaceAreaMethod: (face: Face)=> number,
-	getAreaPenaltyMethod?: (face: Face, polygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number) => number, compass?:Polygon[], globalVisited?:Set<Polygon>):number {
+	getAreaPenaltyMethod?: (face: Face, polygon: Polygon) => number, compass?:Polygon[], globalVisited?:Map<Polygon, number>):number {
 	let tileClipBounds = getClipPlanesInstanceForBox2D(tileCenter, xExtent, zExtent);
 
 	let aabb = BOUNDS;
@@ -428,7 +521,7 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 		//	(polygon as any)[AREA_CALC_SCORE] = 0;
 		//}
 		//(polygon as any)[AREA_CALC] += areaToAdd;
-		areaToAdd -= getAreaPenaltyMethod ? getAreaPenaltyMethod(clippedFace, polygon, tileCenter, xExtent, zExtent) : 0;
+		areaToAdd -= getAreaPenaltyMethod ? getAreaPenaltyMethod(clippedFace, polygon) : 0;
 		//(polygon as any)[AREA_CALC_SCORE] += areaToAdd;
 		if (areaToAdd < 0) areaToAdd = 0; // sanity bounds, negative penalties cannot reduce area to negative
 		areaScore += areaToAdd;
@@ -476,7 +569,7 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 	//console.log(visited.size);
 	//console.log("clipped:"+clipCount);
 	if (globalVisited) {
-		visited.forEach(globalVisited.add, globalVisited);
+		visited.forEach(function(r){globalVisited.set(r,0)},globalVisited);
 	}
 	return areaScore;
 }

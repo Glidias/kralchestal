@@ -198,3 +198,19 @@ In the event there are still rejected points left before the required allocation
 
 Alternatively, let the graph search and everytime a node has been added to shrotest path tree, add node to the rervoire and run 1 iteration through the entire reservoire, calculating the entire polygon area and area of sub-triangles (if needed) for each polygon, and then also attempt to add just 1 point into the given selected polygon, up to max prefered capacity limit, and consider that point as accepted (add to allocated success accepted count) together with the current allocated count for that polygnon (and total allocation count), and continue from there. 
 */
+
+/*
+g = 1.6180339887498948482
+a1 = 1.0/g
+x[n] = (0.5+a1*n) %1
+*/
+
+/*
+g = 1.22074408460575947536
+a1 = 1.0/g
+a2 = 1.0/(g*g)
+a3 = 1.0/(g*g*g)
+x[n] = (0.5+a1*n) %1
+y[n] = (0.5+a2*n) %1
+z[n] = (0.5+a3*n) %1
+*/
