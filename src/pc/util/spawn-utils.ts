@@ -251,7 +251,6 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 
 		visitedRegions.clear();
 		VISITED.forEach(function(r){visitedRegions.set(r,0)}, visitedRegions);
-
 		visitedTiles.clear();
 		// diagonals start from north east clockwise
 
@@ -352,16 +351,16 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 			if (!visitedTiles.has((cX - 1),(cY)) && west) {
 				compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 				expandCalcCount++;
-				areaQueries[3] = ar = calcAreaScoreWithinTile(west, point.set(0, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+				areaQueries[3] = ar = calcAreaScoreWithinTile(west, point.set(0, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass, visitedRegions);
 				visitedTiles.set((cX - 1),(cY), ar);
 				if (areaQueries[3] > EPSILON) {
 					if (areaQueries[6] < 0 && compass[2] && !visitedTiles.has((cX - 1),(cY + 1))) { // SW
-						areaQueries[6] = ar =  calcAreaScoreWithinTile(compass[2], point.set(-xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null);
+						areaQueries[6] = ar =  calcAreaScoreWithinTile(compass[2], point.set(-xExtent*2, 0, zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
 						expandCalcCount++;
 						visitedTiles.set((cX - 1),(cY + 1), ar);
 					}
 					if (areaQueries[7] < 0 && compass[0] && !visitedTiles.has((cX - 1),(cY - 1))) { // NW
-						areaQueries[7] = ar = calcAreaScoreWithinTile(compass[0], point.set(-xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null);
+						areaQueries[7] = ar = calcAreaScoreWithinTile(compass[0], point.set(-xExtent*2, 0, -zExtent*2).add(curTileCenter), xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, null, visitedRegions);
 						expandCalcCount++;
 						visitedTiles.set((cX - 1),(cY - 1), ar);
 					}
@@ -388,22 +387,26 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 		}
 		let resultHull = QuickHull(hullPoints);
 		// DEBUG_CONTOURS.push(traceHullContour(resultHull));
-		
-		area = clipRegionsWithHullPoints(visitedRegions, resultHull, getFaceAreaMethod, getAreaPenaltyMethod)[0];
-		console.log(area + ' vst ' + totalAreaRequired + " ::"+resultHull.length);
+		let lastArea = area;
+		let clipHullAreaResults = clipRegionsWithHullPoints(visitedRegions, resultHull, getFaceAreaMethod, getAreaPenaltyMethod);
+		area = clipHullAreaResults[0];
+		//console.log(lastArea+'/'+area + ' vst ' + totalAreaRequired + " ::"+resultHull.length);
+		if (area < totalAreaRequired) {
+			console.warn("Failed to meet area reuired:" + lastArea+'/'+area+'/'+clipHullAreaResults[1] + ' vst ' + totalAreaRequired + " ::"+resultHull.length )
+		}
 		return area;
 	}
 	
 
 	 DEBUG_CONTOURS.push(traceTileContours(tileCenter.x, tileCenter.z, xExtent, zExtent));
-	 console.log(area + ' vs ' + totalAreaRequired);
+	 // console.log(area + ' vs ' + totalAreaRequired);
 
 	return area;
 	// return set of All tiles and available area across all tiles,
 	// which can be used as a sample space guide bound within world to flood fill areas or survey nearby walkable areas
 }
 
-type ScoreTraverse = {area:number, payload?:number[]};
+type ScoreTraverse = {area:number, payload?:number[], coverage?:number};
 
 const TABULATE_SCORES: ScoreTraverse[] = (() => {
 	return [
@@ -418,37 +421,43 @@ const TABULATE_SCORES: ScoreTraverse[] = (() => {
 	];
 })();
 
-function totalAreaScoreCombi(a:number, b:number, c:number, Ax:number,  Ay:number, Bx:number,  By:number, Cx:number, Cy:number, score:ScoreTraverse) {
+function totalAreaScoreCombi(a:number, b:number, c:number, Ax:number,  Ay:number, Bx:number,  By:number, Cx:number, Cy:number, score:ScoreTraverse, x:number, y:number) {
 	score.area = (a >= 0 ? a : 0) + (b >= 0 ? b: 0) + (c >=0 ? c: 0);
 	score.payload = [Ax, Ay, Bx, By, Cx, Cy];
-}
+	let coverage = 0;
+	coverage |= VISITED_TILES.get(Ax, Ay) > EPSILON ? (1 << ((Ax - x + 1) * 3 + (Ay - y + 1))) : 0;
+	coverage |=  VISITED_TILES.get(Bx, By) > EPSILON ? (1 << ((Bx - x + 1) * 3 + (By - y + 1))) : 0;
+	coverage |=  VISITED_TILES.get(Cx, Cy) > EPSILON ? (1 << ((Cx - x + 1) * 3 + (Cy - y + 1))) : 0;
+	score.coverage = coverage;
 
-function isTraversibleScorePayload(payload:number[]) {
-	return VISITED_TILES.get(payload[0],payload[1]) > EPSILON && VISITED_TILES.get(payload[2],payload[3]) > EPSILON && VISITED_TILES.get(payload[4],payload[5]) > EPSILON;
 }
 
 function enqueueByAreaScore(queue:number[][], areaQueries:Float32Array, x:number, y:number) {
 	let scores = TABULATE_SCORES;
-	for (let i=0; i<8; i++ ){
-		// clockwise from 12 o-click
-		totalAreaScoreCombi(areaQueries[7], areaQueries[0], areaQueries[4], x-1, y-1,  x, y-1,  x+1, y-1, scores[0]);
-		totalAreaScoreCombi(areaQueries[0], areaQueries[4], areaQueries[1], x, y-1,  x+1, y-1,  x+1, y, scores[1]);
-		totalAreaScoreCombi(areaQueries[4], areaQueries[1], areaQueries[5], x+1, y-1,  x+1, y,  x+1, y+1, scores[2]);
-		totalAreaScoreCombi(areaQueries[1], areaQueries[5], areaQueries[2], x+1, y,  x+1, y+1,  x, y+1, scores[3]);
-		totalAreaScoreCombi(areaQueries[5], areaQueries[2], areaQueries[6], x+1, y+1,  x, y+1,  x-1, y+1, scores[4]);
-		totalAreaScoreCombi(areaQueries[2], areaQueries[6], areaQueries[3], x, y+1,  x-1, y+1,  x-1, y, scores[5]);
-		totalAreaScoreCombi(areaQueries[6], areaQueries[3], areaQueries[7], x-1, y+1,  x-1, y,  x-1, y-1, scores[6]);
-		totalAreaScoreCombi(areaQueries[3], areaQueries[7], areaQueries[0], x-1, y,  x-1, y-1,  x, y-1, scores[7]);
-	}
+	
+	// clockwise from 12 o-click
+	totalAreaScoreCombi(areaQueries[7], areaQueries[0], areaQueries[4], x-1, y-1,  x, y-1,  x+1, y-1, scores[0], x, y);
+	totalAreaScoreCombi(areaQueries[0], areaQueries[4], areaQueries[1], x, y-1,  x+1, y-1,  x+1, y, scores[1], x, y);
+	totalAreaScoreCombi(areaQueries[4], areaQueries[1], areaQueries[5], x+1, y-1,  x+1, y,  x+1, y+1, scores[2], x, y);
+	totalAreaScoreCombi(areaQueries[1], areaQueries[5], areaQueries[2], x+1, y,  x+1, y+1,  x, y+1, scores[3], x, y);
+	totalAreaScoreCombi(areaQueries[5], areaQueries[2], areaQueries[6], x+1, y+1,  x, y+1,  x-1, y+1, scores[4], x, y);
+	totalAreaScoreCombi(areaQueries[2], areaQueries[6], areaQueries[3], x, y+1,  x-1, y+1,  x-1, y, scores[5], x, y);
+	totalAreaScoreCombi(areaQueries[6], areaQueries[3], areaQueries[7], x-1, y+1,  x-1, y,  x-1, y-1, scores[6], x, y);
+	totalAreaScoreCombi(areaQueries[3], areaQueries[7], areaQueries[0], x-1, y,  x-1, y-1,  x, y-1, scores[7], x, y);
 
 	scores.sort(compare);
+	let coveredMask = 0;
 	for (let i=0; i<8; i++ ){
 		let score = scores[i];
 		if (score.area <=EPSILON) break;
-		if (isTraversibleScorePayload(score.payload)) queue.push(score.payload);
+		if ( (score.coverage & (~coveredMask))!==0 ) {
+			queue.push(score.payload);
+			coveredMask |= score.coverage;
+		} 
 	}
 
 }
+
 
 function compare( a:ScoreTraverse, b:ScoreTraverse ) {
 	return ( a.area > b.area ) ? - 1 : ( a.area < b.area ) ? 1 : 0;

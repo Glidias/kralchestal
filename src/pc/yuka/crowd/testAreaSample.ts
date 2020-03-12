@@ -42,7 +42,7 @@ class TestAreaSample extends ScriptTypeBase  {
 		this.ptSample.y = pos.y - this.entity.collision.height * 0.5;
 		this.ptSample.z = pos.z;
 
-		let region = this.navmesh.getRegionForPoint(this.ptSample, 0.1);
+		let region = this.navmesh.getRegionForPoint(this.ptSample, 0.16);
 		if (region) {
 			let area = getRequiredTilesFromTile(region, this.ptSample, this.tileSizeRadius, this.tileSizeRadius);
 			// console.log("got area:" + area);
