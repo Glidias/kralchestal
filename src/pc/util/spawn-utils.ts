@@ -38,6 +38,14 @@ const AREA_QUERIES:Float32Array = new Float32Array(8);
 const QUEUE:number[][] = [];
 var TRI_FACE:Face = null;
 
+var TRI_SOUP:number[] = []; //10 values per tri. All triangles' points and area:  3x3 for 3 * xyz points + 1 area of entire triangle
+var TRI_RANGES_PER_REGION:number[] = []; // from/to tri counts per region (2 values)
+
+var SPREAD_OUT_RATIO:number = 1.5;
+export function setSpreadOutRatio(val:number) {
+	SPREAD_OUT_RATIO = val;
+}
+
 function getNewTriFace() {
 	let f:Face = new Face();
 	let w:Wrapper;
@@ -130,11 +138,7 @@ export function getClipPlanesInstanceForBox2D(center:Vector3, extentsX:number, e
 	return headC;
 }
 
-function clipRegionsWithHullPoints(regions:Map<Polygon, number>, pts:number[][], getFaceAreaMethod:(face: Face)=> number, getAreaPenaltyMethod: (face: Face, polygon: Polygon) => number) {
-	if (!TRI_FACE) {
-		TRI_FACE = getNewTriFace();
-	}
-	let triFace = TRI_FACE;
+function getClipPlanesFromHullPoints( pts:number[][]):CullingPlane[] {
 	let headC = CullingPlane.create();
 	let c = headC;
 	perpCullPlane(c, pts[0][0], pts[0][1], pts[1][0], pts[1][1]);
@@ -145,11 +149,26 @@ function clipRegionsWithHullPoints(regions:Map<Polygon, number>, pts:number[][],
 		perpCullPlane(c, pts[i][0], pts[i][1], pts[nextI][0], pts[nextI][1]);
 		tailC = c;
 	}
+	return [headC, tailC];
+}
+
+function clipRegionsWitCullingPlanes(regions:Map<Polygon, number>, cullingPlanes:CullingPlane[], getFaceAreaMethod:(face: Face)=> number, getAreaPenaltyMethod: (face: Face, polygon: Polygon) => number) {
+	if (!TRI_FACE) {
+		TRI_FACE = getNewTriFace();
+	}
+	let triFace = TRI_FACE;
+	let headC = cullingPlanes[0];
+	let tailC = cullingPlanes[1];
 
 	let headFace:Face = null;
 	let tailFace:Face  = null;
 	let entireSoupArea:number = 0;
 	let totalRegionsArea:number = 0;
+
+	const triSoup = TRI_SOUP;
+	let tsi = 0;
+	const triRanges = TRI_RANGES_PER_REGION;
+	let tsr = 0;
 	regions.forEach((v, p)=> {
 		let face = getClippedFaceWithinClipBounds(p, headC);
 		if (face) {
@@ -168,12 +187,23 @@ function clipRegionsWithHullPoints(regions:Map<Polygon, number>, pts:number[][],
 			let wn:Wrapper = w.next;
 			triAw.vertex = face.wrapper.vertex;
 
+
+			triRanges[tsr++] = tsi;
 			while (wn != null) {
 				triBw.vertex = w.vertex;
 				triCw.vertex = wn.vertex;
+				triSoup[tsi++] = triAw.vertex.x;
+				triSoup[tsi++] = triAw.vertex.y;
+				triSoup[tsi++] = triAw.vertex.z;
+				triSoup[tsi++] = triBw.vertex.x;
+				triSoup[tsi++] = triBw.vertex.y;
+				triSoup[tsi++] = triBw.vertex.z;
+				triSoup[tsi++] = triCw.vertex.x;
+				triSoup[tsi++] = triCw.vertex.y;
+				triSoup[tsi++] = triCw.vertex.z;
 				let areaToAdd = getFaceAreaMethod(triFace);
+				triSoup[tsi++] = areaToAdd;
 				areaAccum += areaToAdd;
-				
 				w = w.next;
 				wn = wn.next;
 			}
@@ -181,6 +211,7 @@ function clipRegionsWithHullPoints(regions:Map<Polygon, number>, pts:number[][],
 			areaAccum -= getAreaPenaltyMethod ? getAreaPenaltyMethod(face, p) : 0;
 			if (areaAccum < 0) areaAccum = 0;
 
+			triRanges[tsr++] = tsi;
 			totalRegionsArea += areaAccum;
 			regions.set(p, areaAccum);
 			DEBUG_CONTOURS.push(traceFaceContours(face));
@@ -194,6 +225,15 @@ function clipRegionsWithHullPoints(regions:Map<Polygon, number>, pts:number[][],
 		tailFace.next = Face.collector;
 		Face.collector = headFace;
 	}
+
+	triRanges.length = tsr;
+	triSoup.length = tsi;
+
+	if (tailC) {
+		tailC.next = CullingPlane.collector;
+		CullingPlane.collector = headC;
+	}
+	
 	return [totalRegionsArea, entireSoupArea];
 }
 
@@ -228,7 +268,7 @@ export const DEBUG_CONTOURS:number[][] = [];
 export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number,
 	getFaceAreaMethod?: (face: Face)=> number,
 	getAreaPenaltyMethod?: (face: Face, polygon:Polygon) => number,
-	totalAreaRequired?:number):number {
+	totalAreaRequired?:number):number[] {
 	if (!totalAreaRequired) {
 		totalAreaRequired = (xExtent*2) * (zExtent*2);
 	}
@@ -238,7 +278,11 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 	compass[0] = null; compass[1] = null; compass[2]= null; compass[3] = null;
 	DEBUG_CONTOURS.length = 0;
 
-	let area = calcAreaScoreWithinTile(startPolygon, tileCenter, xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass);
+	let visitedRegions = VISITED_REGIONS;
+	visitedRegions.clear();
+
+	let area = calcAreaScoreWithinTile(startPolygon, tileCenter, xExtent, zExtent, getFaceAreaMethod, getAreaPenaltyMethod, compass, visitedRegions);
+	let clipHullAreaResults;
 
 	if (area + EPSILON < totalAreaRequired) { // need to expand from current tile, start BFS, but prioroitise expanding best area gained
 		let north = compass[0];
@@ -247,10 +291,7 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 		let east = compass[1];
 		let areaQueries = AREA_QUERIES;
 		let visitedTiles = VISITED_TILES;
-		let visitedRegions = VISITED_REGIONS;
-
-		visitedRegions.clear();
-		VISITED.forEach(function(r){visitedRegions.set(r,0)}, visitedRegions);
+	
 		visitedTiles.clear();
 		// diagonals start from north east clockwise
 
@@ -388,23 +429,44 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 		let resultHull = QuickHull(hullPoints);
 		// DEBUG_CONTOURS.push(traceHullContour(resultHull));
 		let lastArea = area;
-		let clipHullAreaResults = clipRegionsWithHullPoints(visitedRegions, resultHull, getFaceAreaMethod, getAreaPenaltyMethod);
+		clipHullAreaResults = clipRegionsWitCullingPlanes(visitedRegions, getClipPlanesFromHullPoints(resultHull), getFaceAreaMethod, getAreaPenaltyMethod);
 		area = clipHullAreaResults[0];
 		//console.log(lastArea+'/'+area + ' vst ' + totalAreaRequired + " ::"+resultHull.length);
 		if (area < totalAreaRequired) {
 			console.warn("Failed to meet area reuired:" + lastArea+'/'+area+'/'+clipHullAreaResults[1] + ' vst ' + totalAreaRequired + " ::"+resultHull.length )
 		}
-		return area;
+		return clipHullAreaResults;
 	}
 	
 
-	 DEBUG_CONTOURS.push(traceTileContours(tileCenter.x, tileCenter.z, xExtent, zExtent));
+	 // DEBUG_CONTOURS.push(traceTileContours(tileCenter.x, tileCenter.z, xExtent, zExtent));
 	 // console.log(area + ' vs ' + totalAreaRequired);
 
-	return area;
+	
+	clipHullAreaResults = clipRegionsWitCullingPlanes(visitedRegions, [getClipPlanesInstanceForBox2D(tileCenter, xExtent*SPREAD_OUT_RATIO, zExtent*SPREAD_OUT_RATIO)], 
+						   getFaceAreaMethod, getAreaPenaltyMethod); 
+	return clipHullAreaResults;
 	// return set of All tiles and available area across all tiles,
 	// which can be used as a sample space guide bound within world to flood fill areas or survey nearby walkable areas
 }
+
+/*
+Include start point?
+Reject too close points to others? (rejectRadius)
+
+SAmple immediately 
+Reservoire sampling all regions visited regions (up to areascore limit quota per region), than weigted sampling for tri within region.
+TRI_SOUP (Or may fill up to max per tri, pick closest compact to startPoint? ... too close to others clamped to agent radius).
+
+OR
+Weight sampling of all regions in soup, then weigted sampling within triaangle
+TRI_RANGES_PER_REGION, VISITED_REGIONS
+
+
+// Consider dylkstria stream into reservoire from VISITED_REGIONS....or even use the hull being used?
+
+OR // K nearest neighbor within treshold, pick largest distance nearest neighbor to continue sampling for neighbors
+*/
 
 type ScoreTraverse = {area:number, payload?:number[], coverage?:number};
 
