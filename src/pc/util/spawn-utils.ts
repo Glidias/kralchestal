@@ -26,7 +26,8 @@ var CLIP_PLANES_BOX2D:CullingPlane;
 
 const EPSILON = 0.00001;
 const VISITED:Set<Polygon> = new Set();
-const VISITED_REGIONS:Map<Polygon, number> = new Map();
+export const VISITED_REGIONS:Map<Polygon, number> = new Map();
+
 const VISITED_TILES:VisitedTilesProxy = new VisitedTilesProxy();
 const STACK:Polygon[] = [];
 const POINT = new Vector3();
@@ -38,8 +39,8 @@ const AREA_QUERIES:Float32Array = new Float32Array(8);
 const QUEUE:number[][] = [];
 var TRI_FACE:Face = null;
 
-var TRI_SOUP:number[] = []; //10 values per tri. All triangles' points and area:  3x3 for 3 * xyz points + 1 area of entire triangle
-var TRI_RANGES_PER_REGION:number[] = []; // from/to tri counts per region (2 values)
+export const TRI_SOUP:number[] = []; //10 values per tri. All triangles' points and area:  3x3 for 3 * xyz points + 1 area of entire triangle
+export const TRI_RANGES_PER_REGION:number[] = []; // from/to tri counts + total rated area per region + full area per region (4 values)
 
 var SPREAD_OUT_RATIO:number = 1.5;
 export function setSpreadOutRatio(val:number) {
@@ -152,7 +153,7 @@ function getClipPlanesFromHullPoints( pts:number[][]):CullingPlane[] {
 	return [headC, tailC];
 }
 
-function clipRegionsWitCullingPlanes(regions:Map<Polygon, number>, cullingPlanes:CullingPlane[], getFaceAreaMethod:(face: Face)=> number, getAreaPenaltyMethod: (face: Face, polygon: Polygon) => number) {
+function clipRegionsWitCullingPlanes(regions:Map<Polygon, number>, cullingPlanes:CullingPlane[], getFaceAreaMethod:(face: Face)=> number, getAreaPenaltyMethod: (face: Face, polygon: Polygon) => number):AreaResults {
 	if (!TRI_FACE) {
 		TRI_FACE = getNewTriFace();
 	}
@@ -187,7 +188,6 @@ function clipRegionsWitCullingPlanes(regions:Map<Polygon, number>, cullingPlanes
 			let wn:Wrapper = w.next;
 			triAw.vertex = face.wrapper.vertex;
 
-
 			triRanges[tsr++] = tsi;
 			while (wn != null) {
 				triBw.vertex = w.vertex;
@@ -208,16 +208,21 @@ function clipRegionsWitCullingPlanes(regions:Map<Polygon, number>, cullingPlanes
 				wn = wn.next;
 			}
 			entireSoupArea += areaAccum;
+			let areaBeforeDeduct = areaAccum;
 			areaAccum -= getAreaPenaltyMethod ? getAreaPenaltyMethod(face, p) : 0;
 			if (areaAccum < 0) areaAccum = 0;
-
-			triRanges[tsr++] = tsi;
+			triRanges[tsr++] = tsi; // end index
 			totalRegionsArea += areaAccum;
-			regions.set(p, areaAccum);
+
+			regions.set(p, tsr); // the index within tri-ranges where area of entire region can be found
+			triRanges[tsr++] = areaAccum;
+			triRanges[tsr++] = areaBeforeDeduct;
+			
 			DEBUG_CONTOURS.push(traceFaceContours(face));
 			
 			face.destroy();
 		} else {
+			regions.set(p, -1);
 			// console.warn("No clip area found for region clip attempt by convex hull!")
 		}
 	});
@@ -268,7 +273,7 @@ export const DEBUG_CONTOURS:number[][] = [];
 export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vector3, xExtent: number, zExtent: number,
 	getFaceAreaMethod?: (face: Face)=> number,
 	getAreaPenaltyMethod?: (face: Face, polygon:Polygon) => number,
-	totalAreaRequired?:number):number[] {
+	totalAreaRequired?:number):AreaResults {
 	if (!totalAreaRequired) {
 		totalAreaRequired = (xExtent*2) * (zExtent*2);
 	}
@@ -437,8 +442,6 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 		}
 		return clipHullAreaResults;
 	}
-	
-
 	 // DEBUG_CONTOURS.push(traceTileContours(tileCenter.x, tileCenter.z, xExtent, zExtent));
 	 // console.log(area + ' vs ' + totalAreaRequired);
 
@@ -450,10 +453,11 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 	// which can be used as a sample space guide bound within world to flood fill areas or survey nearby walkable areas
 }
 
-/*
-Include start point?
-Reject too close points to others? (rejectRadius)
+// get random point for tri soup
+// or get random point through region
+export type AreaResults = [number, number, number?]
 
+/*
 SAmple immediately 
 Reservoire sampling all regions visited regions (up to areascore limit quota per region), than weigted sampling for tri within region.
 TRI_SOUP (Or may fill up to max per tri, pick closest compact to startPoint? ... too close to others clamped to agent radius).
@@ -462,11 +466,200 @@ OR
 Weight sampling of all regions in soup, then weigted sampling within triaangle
 TRI_RANGES_PER_REGION, VISITED_REGIONS
 
-
-// Consider dylkstria stream into reservoire from VISITED_REGIONS....or even use the hull being used?
-
+TO integrate wit
+// Consider dylkstria stream into reservoire from VISITED_REGIONS...
 OR // K nearest neighbor within treshold, pick largest distance nearest neighbor to continue sampling for neighbors
 */
+
+export function getFillableVisitedRegions():Polygon[] {
+	let arr:Polygon[] = [];
+	VISITED_REGIONS.forEach((value, key)=> {
+		if (value >= 2) {
+			arr.push(key);
+		}
+	})
+	return arr;
+}
+
+export function getAreaOfRegion(region:Polygon) {
+	let index = VISITED_REGIONS.get(region);
+	if (index >= 2 && (index & 1)) {
+		throw new Error("invalid area index query found!");
+	}
+	return index >= 2 ? TRI_RANGES_PER_REGION[index] : 0;
+}
+
+export function setAreaOfRegion(region:Polygon, val:number):boolean {
+	let index = VISITED_REGIONS.get(region);
+	if (index >= 2 && (index & 1)) {
+		throw new Error("invalid area index query found!");
+	}
+	if (index >= 2){
+		TRI_RANGES_PER_REGION[index] = val;
+		return true;
+	} 
+	return false;
+}
+
+export type TriSample = {
+	a: Vector3,
+	b: Vector3,
+	c: Vector3,
+	region: Polygon,
+	randOffset: number,
+	triArea: number,
+	triIndex: number
+};
+
+export function getNewTriSample(a:Vector3, b:Vector3, c:Vector3):TriSample {
+	return {
+		a, b, c,
+		region: null,
+		randOffset: 0,
+		triArea: -1,
+		triIndex: -1
+	}
+}
+
+export function setAreaAtTriIndex(triIndex:number, val:number):void {
+	TRI_SOUP[triIndex + 9] = val;
+}
+
+function getTotalAreasOfRegions(regions:Polygon[],  areaResults:AreaResults, fromIndex:number, toLenIndex:number) {
+	let totalArea = 0;
+	if (areaResults.length >= 3) {
+		if (areaResults[2] < 0) {
+			for (let i = fromIndex; i< toLenIndex; i++) {
+				totalArea += getAreaOfRegion(regions[i]);
+			}
+			areaResults[2] = totalArea;
+		} else {
+			totalArea = areaResults[2];
+		}
+	} else {
+		for (let i = fromIndex; i< toLenIndex; i++) {
+			totalArea += getAreaOfRegion(regions[i]);
+		}
+	}
+	return totalArea;
+}
+
+export function sampleRegionTriWeighted(triSample:TriSample, regions:Polygon[], areaResults:AreaResults, randFunc:()=>number, randFuncTri:()=>number=null, fromIndex:number=0, toLenIndex:number=null) {
+	// 	// VISITED_REGIONS -> TRI_RANGES_PER_REGION  vs areaResults[0]  region-rated area
+	if (toLenIndex === null) {
+		toLenIndex = regions.length;
+	}
+	if (randFuncTri === null) randFuncTri = randFunc;
+	
+	let totalArea = fromIndex === 0 && toLenIndex === regions.length ? areaResults[0] : getTotalAreasOfRegions(regions, areaResults, fromIndex, toLenIndex);
+	if (totalArea <= 0) {
+		return null;
+	}
+	
+	const visitedRegions = VISITED_REGIONS;
+	const triRanges = TRI_RANGES_PER_REGION;
+	let r = randFunc() * totalArea;
+	let areaAccum = 0;
+	let chosenRegion = null;
+	let chosenAreaIndex = 0;
+
+	for (let i = fromIndex; i< toLenIndex; i++) {
+		let polygon = regions[i];
+		let areaIndex = visitedRegions.get(polygon);
+		if (areaIndex >= 2) {
+			let area = triRanges[areaIndex];
+			if (r >= areaAccum && r < (areaAccum + area)) {
+				chosenRegion = polygon;
+				chosenAreaIndex = areaIndex;
+				break;
+			}
+			areaAccum += area;
+			
+		} else {
+			// auto-calculate if not found in cache instead of throw error?
+			throw new Error("invalid area access attempt on list of given regions!")
+		}
+	}
+
+	if (chosenRegion) {
+		return _sampleTriFromRegion(triSample, chosenRegion, triRanges[chosenAreaIndex+1], triRanges[chosenAreaIndex-2], triRanges[chosenAreaIndex - 1], randFuncTri());
+	}
+	return null;
+}
+
+export function sampleRegionTriReservoir(triSample:TriSample, regions:Polygon[], areaResults:AreaResults, randFunc:()=>number, randFuncTri:()=>number=null, fromIndex:number=0, toLenIndex:number=null) {
+	// VISITED_REGIONS -> TRI_RANGES_PER_REGION  vs areaResults[0]  region-rated area
+	if (toLenIndex === null) {
+		toLenIndex = regions.length;
+	}
+	if (randFuncTri === null) randFuncTri = randFunc;
+
+	const visitedRegions = VISITED_REGIONS;
+	const triRanges = TRI_RANGES_PER_REGION;
+	let areaSum = 0;
+	let chosenRegion = null;
+	let chosenAreaIndex = 0;
+	for (let i = fromIndex; i< toLenIndex; i++) {
+		let polygon = regions[i];
+		let areaIndex = visitedRegions.get(polygon);
+		if (areaIndex >= 2) {
+			let area = triRanges[areaIndex];
+			areaSum += area;
+			if (area >= randFunc() * areaSum) {
+				chosenRegion = polygon;
+				chosenAreaIndex = areaIndex;
+			}
+		} else {
+			// dev assertion
+			// auto-calculate if not found in cache instead of throw error?
+			throw new Error("invalid area access attempt on list of given regions!")
+		}
+	}
+
+	if (chosenRegion) {
+		return _sampleTriFromRegion(triSample, chosenRegion, triRanges[chosenAreaIndex+1], triRanges[chosenAreaIndex-2], triRanges[chosenAreaIndex - 1], randFuncTri());
+	}
+	return null;
+}
+
+export function sampleTriWeighted(triSample:TriSample, areaResults:AreaResults, randFunc:()=>number) {
+	return _sampleTriFromRegion(triSample, null, areaResults[1], 0, TRI_SOUP.length, randFunc());
+}
+
+function _sampleTriFromRegion(triSample:TriSample, region:Polygon, regionArea:number, fromIndex:number, toIndex:number, r:number) {
+	r *= regionArea;
+
+	triSample.region = region;
+	const triSoup = TRI_SOUP;
+	let areaAccum = 0;
+	let ti = -1;
+	for (let i = fromIndex; i< toIndex; i+=10) {
+		let area = triSoup[i+9];
+		if (r >= areaAccum && r < (areaAccum + area)) {
+			triSample.randOffset = (r - areaAccum) / area;
+			triSample.triArea = area;
+			triSample.triIndex = i;
+			ti = i;
+			break;
+		}
+		areaAccum += area;
+	}
+	if (ti < 0) return null;
+	
+	triSample.a.x = triSoup[ti++];
+	triSample.a.y = triSoup[ti++];
+	triSample.a.z = triSoup[ti++];
+
+	triSample.b.x = triSoup[ti++];
+	triSample.b.y = triSoup[ti++];
+	triSample.b.z = triSoup[ti++];
+
+	triSample.c.x = triSoup[ti++];
+	triSample.c.y = triSoup[ti++];
+	triSample.c.z = triSoup[ti++];
+
+	return triSample;
+}
 
 type ScoreTraverse = {area:number, payload?:number[], coverage?:number};
 
@@ -648,17 +841,6 @@ export function calcAreaScoreWithinTile(startPolygon:Polygon, tileCenter: Vector
 	}
 	return areaScore;
 }
-
-
-// Final result of spawning samples can involve several approaches
-/*
-  Reservoire sampling using existing navmesh graph with Dilkshrya, favoring start to ending polygon region,
-  weighted areas per region
-
-  Flood fill all points...(hashed) across entire region with optional filter,
-  then get all nearest neighbor points beginning from starting point... (repeat process recursively for all points)
-*/
-
 
 export function getArea2DOfFace(face:Face):number {
 	var w:Wrapper;
