@@ -1,5 +1,5 @@
 import { createScript, ScriptTypeBase, attrib } from "../../../../lib/create-script-decorator";
-import {getRequiredTilesFromTile, DEBUG_CONTOURS} from "../../util/spawn-utils"
+import {getRequiredTilesFromTile, DEBUG_CONTOURS} from "../../util/area-utils"
 import { NavMesh } from "../../../../yuka/src/navigation/navmesh/NavMesh";
 import { Vector3 } from "../../../../yuka/src/math/Vector3";
 import { CellSpacePartitioning } from "../../../../yuka/src/partitioning/CellSpacePartitioning";
