@@ -451,27 +451,10 @@ export function getRequiredTilesFromTile(startPolygon:Polygon, tileCenter: Vecto
 	clipHullAreaResults = clipRegionsWitCullingPlanes(visitedRegions, [getClipPlanesInstanceForBox2D(tileCenter, xExtent*SPREAD_OUT_RATIO, zExtent*SPREAD_OUT_RATIO)], 
 						   getFaceAreaMethod, getAreaPenaltyMethod); 
 	return clipHullAreaResults;
-	// return set of All tiles and available area across all tiles,
-	// which can be used as a sample space guide bound within world to flood fill areas or survey nearby walkable areas
 }
 
-// get random point for tri soup
-// or get random point through region
+
 export type AreaResults = [number, number, number?]
-
-/*
-SAmple immediately 
-Reservoire sampling all regions visited regions (up to areascore limit quota per region), than weigted sampling for tri within region.
-TRI_SOUP (Or may fill up to max per tri, pick closest compact to startPoint? ... too close to others clamped to agent radius).
-
-OR
-Weight sampling of all regions in soup, then weigted sampling within triaangle
-TRI_RANGES_PER_REGION, VISITED_REGIONS
-
-TO integrate wit
-// Consider dylkstria stream into reservoire from VISITED_REGIONS...
-OR // K nearest neighbor within treshold, pick largest distance nearest neighbor to continue sampling for neighbors
-*/
 
 export function getFillableVisitedRegions():Polygon[] {
 	let arr:Polygon[] = [];
