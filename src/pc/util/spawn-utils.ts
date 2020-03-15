@@ -73,11 +73,11 @@ export function populateAllLog10(spawnCallback:SpawnCallback, regions:Polygon[],
         let region = regions[i];
         //getAreaOfRegion()
         let areaToAdd = methodArea(region);
-        
+        if (areaToAdd < 0) areaToAdd = -areaToAdd;
         allocArea[i] = areaToAdd; // true area of region for sampling within any tris within region
         
         areaToAdd -= methodPenaltyArea !== null ? methodPenaltyArea(region) : 0;
-        if (areaToAdd < 0) areaToAdd = 0;
+       
         if (areaToAdd > maxAreaCap) areaToAdd = maxAreaCap;
 
         totalAreaRegions += areaToAdd;
@@ -90,18 +90,21 @@ export function populateAllLog10(spawnCallback:SpawnCallback, regions:Polygon[],
         if (!mapRatingToIndices.has(areaToAdd)) {
             mapRatingToIndices.set(areaToAdd, ai);
             allocAreaRatings[ai++] = {
-                rating: areaToAdd,
+                rating: 0,
                 regionIndices: []
             }
         }
         let rating = allocAreaRatings[mapRatingToIndices.get(areaToAdd)];
+        rating.rating += tt;
+        
         rating.regionIndices.push(i);
 
         totalArea+= areaToAdd;
     }
     // array of similar allocAreaRatings, are grouped together into an array for sampling
 
-    let allocAreaRatingValues = allocAreaRatings.map((p) => p.rating * p.regionIndices.length);
+    // * p.regionIndices.length
+    let allocAreaRatingValues = allocAreaRatings.map((p) => p.rating);
 
     if (totalAmount < 0) totalAmount = Math.floor(totalAreaRegions / -totalAmount);
     
@@ -120,6 +123,7 @@ export function populateAllLog10(spawnCallback:SpawnCallback, regions:Polygon[],
         triSoup[ai++] = area;
         return area;
     };
+
     for (let i =0; i< totalAmount; i++) {
         let sampledIndex = findSampledIndexByRatings(allocAreaRatingValues, RND_REGION(), totalArea );
         let allocAreas = allocAreaRatings[sampledIndex];

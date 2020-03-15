@@ -52,7 +52,7 @@ class TestAreaSample extends ScriptTypeBase  {
 
 			this.app.root.addChild(clonedEnt);
 			return true;
-		}, this.navmesh.regions, 555,   100, 0.1);
+		}, this.navmesh.regions, 2000,   1, 0.1);
 		console.log(results);
 	}
 
