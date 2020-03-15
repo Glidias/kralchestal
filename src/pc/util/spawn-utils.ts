@@ -84,6 +84,7 @@ export function populateAllLog10(spawnCallback:SpawnCallback, regions:Polygon[],
 
         // general lorgarithm rating of area
         let tt = areaToAdd;
+
         areaToAdd = Math.round(Math.log((1 + areaToAdd*logMultiplier) / logPrecision)) * logPrecision; 
         
         //allocAreaRatings[i] = areaToAdd;
@@ -125,7 +126,7 @@ export function populateAllLog10(spawnCallback:SpawnCallback, regions:Polygon[],
     };
 
     for (let i =0; i< totalAmount; i++) {
-        let sampledIndex = findSampledIndexByRatings(allocAreaRatingValues, RND_REGION(), totalArea );
+        let sampledIndex = findSampledIndexByRatings(allocAreaRatingValues, RND_REGION(), totalAreaRegions );
         let allocAreas = allocAreaRatings[sampledIndex];
         let regionIndex = allocAreas.regionIndices[Math.floor(Math.random() * allocAreas.regionIndices.length)];
         let region = regions[regionIndex];
