@@ -48,7 +48,8 @@
         "typescript": "^3.8.2",
         "webpack": "^4.41.6",
         "webpack-cli": "^3.3.11",
-        "webpack-dev-server": "^3.10.3"
+        "webpack-dev-server": "^3.10.3",
+        "acorn": ">=6.4.1"
     },
     "dependencies": {
         "cdt2d": "^1.0.0",
