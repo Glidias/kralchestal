@@ -110,6 +110,8 @@ class NavmeshCreate extends ScriptTypeBase {
         this.aabb = totalAABB;
 
         // polygons= polygons.filter((p)=>p.plane.normal.y > 0);
+        //polygons= polygons.filter((p)=>p.convex);
+
         this.navmesh.fromPolygons(polygons);
         (this.entity as any).navmesh = this.navmesh;
         (this.entity as any).navmeshAABB = this.aabb;

@@ -20,9 +20,10 @@ export function halton (index, base) {
  * @param {number} n 
  * @return {number}
  */
-function r (n) {
+export function r1 (n) {
     return 0.618033988749894848 * n % 1;
 }
+
 /**
  * 
  * @param {number} n 
@@ -94,7 +95,7 @@ export function r2x(n){
  * @param {{x:number, y:number, z:number}} result
  * @return {{x:number, y:number, z:number}} The result
  */
-function pointOnTriangle(A, B, C, p, q, result) {
+export function pointOnTriangle(A, B, C, p, q, result) {
     let v = Math.sqrt(q);
     let a = 1 - v;
     let b = (1 - p) * v;

@@ -4,6 +4,9 @@ import { NavMesh } from "../../../../yuka/src/navigation/navmesh/NavMesh";
 import { Vector3 } from "../../../../yuka/src/math/Vector3";
 import { CellSpacePartitioning } from "../../../../yuka/src/partitioning/CellSpacePartitioning";
 import BoundBox from "../../../hx/components/BoundBox";
+import { populateAllLog10, setRegionPickRandomiser } from "../../util/spawn-utils";
+import { r1 } from "../../util/random-utils";
+
 @createScript("testAreaSample")
 class TestAreaSample extends ScriptTypeBase  {
 
@@ -16,6 +19,8 @@ class TestAreaSample extends ScriptTypeBase  {
 	colorBuffer: pc.Color[];
 	color: pc.Color;
 
+	mockEntity:pc.Entity;
+
 	postInitialize () {
 		this.navmesh = (this.navmeshEntity as any).navmesh;
 		if (!this.navmesh) throw new Error("need navmesh dependency from navmesh entity");
@@ -26,6 +31,7 @@ class TestAreaSample extends ScriptTypeBase  {
 		this.colorBuffer = [];
 		this.color = new pc.Color(1, 0.3, 0);
 
+		this.mockEntity = (this.entity.findByName("Char") as pc.Entity).clone() as pc.Entity;
 
 		if (!this.navmesh.spatialIndex) {
 			let aabb:BoundBox = (this.navmeshEntity as any).navmeshAABB;
@@ -34,6 +40,20 @@ class TestAreaSample extends ScriptTypeBase  {
 			this.navmesh.updateSpatialIndex();
 		}
 
+		let n = 1;
+		let testSeq = ()=> {
+			return r1(n++);
+		}
+		// setRegionPickRandomiser(testSeq);
+		
+		let results = populateAllLog10((pt)=> {
+			let clonedEnt = this.mockEntity.clone();
+			clonedEnt.setPosition(pt.x, pt.y + this.entity.collision.height * 0.5, pt.z);
+
+			this.app.root.addChild(clonedEnt);
+			return true;
+		}, this.navmesh.regions, 555,   100, 0.1);
+		console.log(results);
 	}
 
 	update () {

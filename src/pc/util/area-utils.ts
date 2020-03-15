@@ -648,6 +648,7 @@ export function _sampleTriFromRegion(triSample:TriSample, region:Polygon, region
 
 export function findSampledIndexByRatings(ratings:ArrayLike<number>, r:number, totalArea:number) {
 	let areaAccum = 0;
+	r *= totalArea;
 	for (let i = 0, l = ratings.length; i< l; i++) {
 		let area = ratings[i];
 		if (r >= areaAccum && r < (areaAccum + area)) {
