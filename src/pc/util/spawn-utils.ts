@@ -3,13 +3,41 @@
  */
 import { Polygon } from "../../../yuka/src/math/Polygon";
 import { Vector3 } from "../../../yuka/src/math/Vector3";
-import { AreaResults, getArea2DOfPolygon, findSampledIndexByRatings, TRI_SOUP, _sampleTriFromRegion, getNewTriSample, TriAreaCallback } from "./area-utils";
+import { AreaResults, getArea2DOfPolygon, findSampledIndexByRatings, EPSILON, VISITED_REGIONS, TRI_SOUP, _sampleTriFromRegion, getNewTriSample, TriAreaCallback, sampleTriWeighted, sampleRegionTriWeighted, getFillableVisitedRegions, sampleRegionTriReservoir } from "./area-utils";
 import { Graph } from "../../../yuka/src/graph/core/Graph";
 import { pointOnTriangle } from "./random-utils";
+import { GraphPlus, ShortestPathTree, NavPtEdge } from "./graphpoly-utils";
+import { Dijkstra } from "../../../yuka/src/graph/search/Dijkstra";
+import { Edge } from "../../../yuka/src/graph/core/Edge";
+import { LineSegment } from "../../../yuka/src/math/LineSegment";
 
 type SpawnPt = {x:number, y:number, z:number};
 type SpawnCallback = (pt:SpawnPt)=>boolean;
 const SPAWNPT = {x:0, y:0, z:0};
+
+var GRAPH_PLUS:GraphPlus;
+var SPT_PLUS:ShortestPathTree;
+var DIJK_PLUS:Dijkstra;
+var REGIONS_TEMP:Polygon[];
+var REGIONS_TEMP_INDICES:Map<Polygon, number>;
+var EDGE_LINE:LineSegment;
+var closestPoint:Vector3;
+
+function getGraphPlus() {
+    if (!GRAPH_PLUS) {
+        GRAPH_PLUS = new GraphPlus();
+        SPT_PLUS = new ShortestPathTree();
+        DIJK_PLUS = new Dijkstra(GRAPH_PLUS, 0, -1);
+        // There is a risk to this hack, since SPT_PLUS fakes the Map and doesn't implement everything from it
+        // only what is needed for DIJK or Astar algorithms (at their current codebases)
+        DIJK_PLUS._shortestPathTree = SPT_PLUS as any; 
+        REGIONS_TEMP = [];
+        REGIONS_TEMP_INDICES = new Map();
+        EDGE_LINE = new LineSegment(null, null);
+        closestPoint = new Vector3();
+    }
+    return GRAPH_PLUS;
+}
 
 type AllocAreaRating = {
     rating: number,
@@ -168,15 +196,153 @@ export function populateAllLog10(spawnCallback:SpawnCallback, regions:Polygon[],
 export function populateFromVincity(spawnCallback:SpawnCallback, totalAmount:number, areaResults:AreaResults, 
     startPtInclude: Vector3=null, startPolygon:Polygon=null,  
     navmesh:{regions:Polygon[], graph:Graph, getNodeIndex:(region:Polygon)=>number}=null, totalAmountDivisor:number=0) {
-    if (totalAmount === 0) throw new Error("Total amount supplied must be non-zero value!")
+    if (totalAmount === 0) throw new Error("Total amount supplied must be non-zero value!");
+
+    const triSoup = TRI_SOUP;
+    let area;
+    const spawnPt = SPAWNPT;
+    let s;
+    const triSample = TRI_SAMPLE;
     if (!startPolygon) {
         if (totalAmount < 0) { // just fill all areaResults[1] triangles from triSoup fully in proportion to area per tri!
-            //TRI_SOUP
-        } else { // weighted sampling picks up to totalAmount reuired
+            if (startPtInclude) {
+                spawnPt.x = startPtInclude.x;
+                spawnPt.y = startPtInclude.y;
+                spawnPt.z = startPtInclude.z;
+                spawnCallback(spawnPt);
+            }
 
-        }
+            for (let i = 0, l=triSoup.length; i<l; i+=10) {
+                area = triSoup[i+9];
+                s = Math.floor(area / -totalAmount);
+                while(--s >= 0) {
+                    //let tri = 
+                    sampleTriWeighted(triSample, areaResults, RND_TRI);
+                    //if (tri) {
+                    pointOnTriangle(triSample.a, triSample.b, triSample.c, RND_TRI_P(), RND_TRI_Q(), spawnPt);
+                    //}
+                    spawnCallback(spawnPt);
+                }
+            }
+        } else { // weighted sampling picks up to totalAmount required
+            s = totalAmount;
+            if (startPtInclude) {
+                spawnPt.x = startPtInclude.x;
+                spawnPt.y = startPtInclude.y;
+                spawnPt.z = startPtInclude.z;
+                spawnCallback(spawnPt);
+                s--;
+            }
+            while(--s >= 0) {
+                sampleRegionTriWeighted(triSample, getFillableVisitedRegions(), areaResults, RND_REGION, RND_TRI);
+                pointOnTriangle(triSample.a, triSample.b, triSample.c, triSample.randOffset, RND_TRI_Q(), spawnPt);
+                spawnCallback(spawnPt);
+            }
+        } 
     } else { // potential graph/neighborhood search re-order of polygons for Reservoir sampling  areaResults[0] regions
-        if (totalAmount < 0) throw new Error('Total amount must be a positive value for ')
+        if (totalAmount < 0) throw new Error('Total amount must be a positive value for');
+        const graphPlus = getGraphPlus();
+        const spt = SPT_PLUS;
+        const search = DIJK_PLUS;
+        const regionTempIndices = REGIONS_TEMP_INDICES;
+        let rt = 0;
+        let regions:Polygon[];
+        let visitedRegions = VISITED_REGIONS;
+        const edgeLine = EDGE_LINE;
+
+        let currentPivotPt:Vector3; // currently only used in cases without navmesh pamrameter
+
+        if (navmesh) {
+            regions = navmesh.regions;
+            search.source = navmesh.getNodeIndex(startPolygon);
+        } else {
+            regionTempIndices.clear();
+            search.source = 0;
+            regions = REGIONS_TEMP;
+            regionTempIndices.set(startPolygon, rt);
+            regions[rt++] = startPolygon;
+            if (!startPtInclude) {
+                startPtInclude = startPolygon.centroid;
+                currentPivotPt = startPtInclude;
+            }
+        }
+        search.target = -1;
+
+        const reservoir:Polygon[] = [];
+        let ri = 0;
+
+        if (startPtInclude) {
+            spawnPt.x = startPtInclude.x;
+            spawnPt.y = startPtInclude.y;
+            spawnPt.z = startPtInclude.z;
+            spawnCallback(spawnPt);
+            if (totalAmount > 0) totalAmount--;
+        }
+       
+        spt.setCallback = function(index, edge) {
+            let region = regions[index];
+            // coming in from edge towards index
+            if (!navmesh) {
+                currentPivotPt = (edge as NavPtEdge).pt;
+            }
+
+            if (!visitedRegions.has(region)) {
+                return false;
+            }
+            if (visitedRegions.get(region) > EPSILON) {
+                reservoir[ri++] = region;
+                 // if totalAmountDivisor > 0 || totalAmount < 0
+                // spawn 1 or as many required to fill regions up to max from current pivot point
+                // to closest nighbor edge approximation rStartI
+                // till rSTartI >= 0
+                //sampleRegionTriReservoir()
+            }
+            return true;
+        };
+
+        graphPlus.getEdgesOfNode = navmesh ? 
+        function(index, outgoingEdges) {
+            if (!visitedRegions.has(regions[index])) {
+                outgoingEdges.length = 0;
+                return outgoingEdges;
+            }
+            return navmesh.graph.getEdgesOfNode(index, outgoingEdges);
+        }
+        :
+        function(index, outgoingEdges) {
+            let region = regions[index];
+
+            if (!visitedRegions.has(region)) {  // <- this isn't really needed (i think, since check is alread done prior to push to queue)
+                outgoingEdges.length = 0;
+                return outgoingEdges;
+            }
+
+            // Only push outgoing edges that lead to visitedRegions
+            let edge = region.edge;
+            let ci = 0;
+            do {
+                if (edge.twin) {
+                    if (visitedRegions.has(edge.twin.polygon)) {
+                        edgeLine.from = edge.prev.vertex;
+                        edgeLine.to = edge.vertex;
+                        edgeLine.closestPointToPoint(currentPivotPt, true, closestPoint);
+                        if (!regionTempIndices.has(edge.twin.polygon)) {
+                            regionTempIndices.set(edge.twin.polygon, rt);
+                            regions[rt++] = edge.twin.polygon;
+                        }
+                        let to = regionTempIndices.get(edge.twin.polygon);
+                        //  // consider pooling this in graphpoly-utils?
+                        outgoingEdges[ci++] = new NavPtEdge(index, to, closestPoint, currentPivotPt);
+
+                    }
+                }
+            } while (edge !== region.edge);
+            
+            outgoingEdges.length = ci;
+    
+
+            return outgoingEdges;
+        }
     }
 }
 

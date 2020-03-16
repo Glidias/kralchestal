@@ -26,7 +26,7 @@ var CLIP_PLANES_BOX2D:CullingPlane;
 
 
 const AREA_CACHE:number[] = [];
-const EPSILON = 0.00001;
+export const EPSILON = 0.00001;
 const VISITED:Set<Polygon> = new Set();
 export const VISITED_REGIONS:Map<Polygon, number> = new Map();
 
